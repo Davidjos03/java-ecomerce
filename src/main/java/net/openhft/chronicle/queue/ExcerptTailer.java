@@ -18,7 +18,6 @@
 package net.openhft.chronicle.queue;
 
 import net.openhft.chronicle.core.annotation.SingleThreaded;
-import net.openhft.chronicle.core.io.IORuntimeException;
 import net.openhft.chronicle.wire.DocumentContext;
 import net.openhft.chronicle.wire.MarshallableIn;
 import net.openhft.chronicle.wire.ReadMarshallable;
@@ -186,21 +185,6 @@ public interface ExcerptTailer extends ExcerptCommon<ExcerptTailer>, Marshallabl
     TailerDirection direction();
 
     /**
-     * Winds this ExcerptTailer to after the last entry which wrote an entry to the queue.
-     *
-     * @param queue which was written to.
-     * @return this ExcerptTailer
-     * @throws IORuntimeException   if the provided {@code queue} couldn't be wound to the last index.
-     * @throws NullPointerException if the provided {@code queue} is {@code null}
-     * @deprecated to be removed in x.27. Use CQE TailerUtil
-     */
-    @Deprecated(/* to be removed in x.27. Use CQE TailerUtil */)
-    @NotNull
-    default ExcerptTailer afterLastWritten(ChronicleQueue queue) {
-        return afterWrittenMessageAtIndex(queue, Long.MIN_VALUE);
-    }
-
-    /**
      * Sets the Read After Replica Acknowledged property of this Tailer to the
      * provided {@code readAfterReplicaAcknowledged}.
      * <p>
@@ -261,35 +245,6 @@ public interface ExcerptTailer extends ExcerptCommon<ExcerptTailer>, Marshallabl
     }
 
     /**
-     * Returns a number of excerpts in a cycle. May use a fast path to return the cycle length cached in indexing,
-     * which is updated last during append operation so may be possible that a single entry is available for reading
-     * but not acknowledged by this method yet.
-     * <p>
-     * Calling this method may move ExcerptTailer to the specified cycle and release its store.
-     *
-     * @return the approximate number of excerpts in a cycle.
-     * @deprecated Use {@link #excerptsInCycle(int)} instead
-     */
-    @Deprecated(/* To be removed in x.27 */)
-    default long approximateExcerptsInCycle(int cycle) {
-        return excerptsInCycle(cycle);
-    }
-
-    /**
-     * Returns an exact number of excerpts in a cycle available for reading. This may be a computationally
-     * expensive operation.
-     * <p>
-     * Calling this method may move ExcerptTailer to the specified cycle and release its store.
-     *
-     * @return the exact number of excerpts in a cycle.
-     * @deprecated Use {@link #excerptsInCycle(int)} instead
-     */
-    @Deprecated(/* To be removed in x.27 */)
-    default long exactExcerptsInCycle(int cycle) {
-        return excerptsInCycle(cycle);
-    }
-
-    /**
      * Return the exact number of excerpts in a cycle available for reading.
      * <p>
      * Calling this method may move ExcerptTailer to the specified cycle and release its store.
@@ -309,23 +264,6 @@ public interface ExcerptTailer extends ExcerptCommon<ExcerptTailer>, Marshallabl
      */
     @NotNull
     TailerState state();
-
-    /**
-     * Winds this ExcerptTailer to the specified {@code index} of the provided {@code queue} and reads the history message,
-     * then moves {@code this} tailer to the message index in the history message.
-     *
-     * @param queue The queue which was written to, and may contain a history message at the specified {@code index}.
-     *              Must not be null.
-     * @param index The index to read the history message in the {@code queue}.
-     * @return This ExcerptTailer instance.
-     * @throws IORuntimeException   if the provided {@code queue} couldn't be wound to the last index.
-     * @throws NullPointerException if the provided {@code queue} is null.
-     * @deprecated to be removed in x.27. Use CQE TailerUtil
-     */
-    @Deprecated(/* to be removed in x.27. Use CQE TailerUtil */)
-    default @NotNull ExcerptTailer afterWrittenMessageAtIndex(@NotNull ChronicleQueue queue, long index) {
-        throw new UnsupportedOperationException("todo");
-    }
 
     interface AcknowledgedIndexReplicatedCheck {
         /**

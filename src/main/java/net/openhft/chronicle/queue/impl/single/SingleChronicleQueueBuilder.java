@@ -60,7 +60,6 @@ import static java.util.Objects.requireNonNull;
 import static net.openhft.chronicle.core.pool.ClassAliasPool.CLASS_ALIASES;
 import static net.openhft.chronicle.queue.impl.single.SingleChronicleQueue.QUEUE_METADATA_FILE;
 
-@SuppressWarnings("deprecation")
 public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable implements Cloneable, Builder<SingleChronicleQueue> {
     public static final long SMALL_BLOCK_SIZE = OS.isWindows() ? OS.SAFE_PAGE_SIZE : OS.pageSize(); // the smallest safe block size on Windows 8+
 
@@ -122,7 +121,6 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
     private transient TableStore<SCQMeta> metaStore;
 
     // enterprise stuff
-    private int deltaCheckpointInterval = -1;
     private Supplier<BiConsumer<BytesStore<?,?>, Bytes<?>>> encodingSupplier;
     private Supplier<BiConsumer<BytesStore<?,?>, Bytes<?>>> decodingSupplier;
     private Updater<Bytes<?>> messageInitializer;
@@ -315,8 +313,6 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
             result = onlyAvailableInEnterprise("Buffering");
         if (rollTimeZone != null && !rollTimeZone.getId().equals("UTC") && !rollTimeZone.getId().equals("Z"))
             result = onlyAvailableInEnterprise("Non-UTC roll time zone");
-        if (wireType == WireType.DELTA_BINARY)
-            result = onlyAvailableInEnterprise("Wire type " + wireType.name());
         if (encodingSupplier != null)
             result = onlyAvailableInEnterprise("Encoding");
         if (key != null)
@@ -395,7 +391,7 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
     protected void initializeMetadata() {
         File metapath = metapath();
         validateRollCycle(metapath);
-        SCQMeta metadata = new SCQMeta(new SCQRoll(rollCycle(), epoch(), rollTime, rollTimeZone), deltaCheckpointInterval(),
+        SCQMeta metadata = new SCQMeta(new SCQRoll(rollCycle(), epoch(), rollTime, rollTimeZone),
                 sourceId());
         try {
 
@@ -499,10 +495,6 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
     @NotNull
     WriteLock writeLock() {
         return readOnly() ? new ReadOnlyWriteLock() : new TableStoreWriteLock(metaStore, pauserSupplier(), timeoutMS() * 3 / 2);
-    }
-
-    public int deltaCheckpointInterval() {
-        return deltaCheckpointInterval == -1 ? 64 : deltaCheckpointInterval;
     }
 
     public QueueOffsetSpec queueOffsetSpec() {
@@ -649,19 +641,8 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
 
     @NotNull
     public SingleChronicleQueueBuilder wireType(@NotNull WireType wireType) {
-        if (wireType == WireType.DELTA_BINARY)
-            deltaCheckpointInterval(64);
         this.wireType = wireType;
         return this;
-    }
-
-    private void deltaCheckpointInterval(int deltaCheckpointInterval) {
-        assert checkIsPowerOf2(deltaCheckpointInterval);
-        this.deltaCheckpointInterval = deltaCheckpointInterval;
-    }
-
-    private boolean checkIsPowerOf2(long value) {
-        return (value & (value - 1)) == 0;
     }
 
     @NotNull
@@ -725,7 +706,7 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
      */
     @NotNull
     public BufferMode writeBufferMode() {
-        return wireType() == WireType.DELTA_BINARY ? BufferMode.None : (writeBufferMode == null)
+        return writeBufferMode == null
                 ? BufferMode.None : writeBufferMode;
     }
 
