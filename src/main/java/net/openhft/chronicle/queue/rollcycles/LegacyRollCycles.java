@@ -7,7 +7,9 @@ package net.openhft.chronicle.queue.rollcycles;
 import net.openhft.chronicle.queue.RollCycle;
 
 /**
- * Old RollCycle definitions kept for historical reasons
+ * Enum representing legacy roll cycles, kept for historical reasons.
+ * <p>These roll cycles were used in older versions of Chronicle Queue and retain their original
+ * configurations for backward compatibility.
  */
 public enum LegacyRollCycles implements RollCycle {
     /**
@@ -28,12 +30,25 @@ public enum LegacyRollCycles implements RollCycle {
     private final int lengthInMillis;
     private final RollCycleArithmetic arithmetic;
 
+    /**
+     * Constructs a LegacyRollCycle with the given parameters.
+     *
+     * @param format          The format string used for rolling files
+     * @param lengthInMillis  The duration of each cycle in milliseconds
+     * @param indexCount      The number of index entries
+     * @param indexSpacing    The spacing between indexed entries
+     */
     LegacyRollCycles(String format, int lengthInMillis, int indexCount, int indexSpacing) {
         this.format = format;
         this.lengthInMillis = lengthInMillis;
         this.arithmetic = RollCycleArithmetic.of(indexCount, indexSpacing);
     }
 
+    /**
+     * Returns the maximum number of messages allowed per cycle.
+     *
+     * @return The maximum number of messages allowed per cycle
+     */
     public long maxMessagesPerCycle() {
         return arithmetic.maxMessagesPerCycle();
     }
@@ -49,7 +64,10 @@ public enum LegacyRollCycles implements RollCycle {
     }
 
     /**
-     * @return this is the size of each index array, note: indexCount^2 is the maximum number of index queue entries.
+     * Returns the default size of the index array.
+     * <p>Note: {@code indexCount^2} is the maximum number of index queue entries.
+     *
+     * @return The default index count
      */
     @Override
     public int defaultIndexCount() {

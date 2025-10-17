@@ -35,8 +35,22 @@ import java.io.Closeable;
  */
 public interface Pretoucher extends Closeable {
 
+    /**
+     * Executes the pre-touching process, advancing over pages in the Chronicle Queue's store file.
+     * This method is intended to be run continuously in a background thread, ensuring pages are prepared
+     * before they are accessed by appenders.
+     * <p>
+     * If the underlying queue has been closed, this method will throw an {@link InvalidEventHandlerException}.
+     *
+     *
+     * @throws InvalidEventHandlerException if the queue has been closed or if there is an issue during the pre-touch operation.
+     */
     void execute() throws InvalidEventHandlerException;
 
+    /**
+     * Closes the pretoucher and releases any resources associated with it.
+     * After calling this method, further calls to {@link #execute()} will throw an {@link InvalidEventHandlerException}.
+     */
     @Override
     void close();
 }

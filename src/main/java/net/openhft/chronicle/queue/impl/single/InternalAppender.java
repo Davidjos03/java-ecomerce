@@ -20,7 +20,11 @@ import net.openhft.chronicle.bytes.BytesStore;
 import net.openhft.chronicle.queue.ExcerptAppender;
 
 /**
- * please don't use this interface as it's an internal implementation.
+ * This interface, {@code InternalAppender}, extends the {@link ExcerptAppender} and provides
+ * additional functionality for appending entries at specific indices within a queue.
+ * <p>
+ * <strong>Note:</strong> This is an internal interface and should not be used externally
+ * as it is subject to changes without notice.
  */
 public interface InternalAppender extends ExcerptAppender {
 

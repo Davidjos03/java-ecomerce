@@ -7,7 +7,9 @@ package net.openhft.chronicle.queue.rollcycles;
 import net.openhft.chronicle.queue.RollCycle;
 
 /**
- * These are largely used for testing and benchmarks to almost turn off indexing.
+ * Enum representing sparse roll cycles, primarily used for testing and benchmarking purposes.
+ * <p>These roll cycles are designed to minimize indexing, making them useful for scenarios where
+ * indexing is either unnecessary or should be kept minimal to reduce overhead.
  */
 public enum SparseRollCycles implements RollCycle {
     /**
@@ -32,12 +34,25 @@ public enum SparseRollCycles implements RollCycle {
     private final int lengthInMillis;
     private final RollCycleArithmetic arithmetic;
 
+    /**
+     * Constructs a SparseRollCycle with the given parameters.
+     *
+     * @param format          The format string used for rolling files
+     * @param lengthInMillis  The duration of each cycle in milliseconds
+     * @param indexCount      The number of index entries
+     * @param indexSpacing    The spacing between indexed entries
+     */
     SparseRollCycles(String format, int lengthInMillis, int indexCount, int indexSpacing) {
         this.format = format;
         this.lengthInMillis = lengthInMillis;
         this.arithmetic = RollCycleArithmetic.of(indexCount, indexSpacing);
     }
 
+    /**
+     * Returns the maximum number of messages allowed per cycle.
+     *
+     * @return The maximum number of messages allowed per cycle
+     */
     public long maxMessagesPerCycle() {
         return arithmetic.maxMessagesPerCycle();
     }
@@ -53,7 +68,10 @@ public enum SparseRollCycles implements RollCycle {
     }
 
     /**
-     * @return this is the size of each index array, note: indexCount^2 is the maximum number of index queue entries.
+     * Returns the default size of the index array.
+     * <p>Note: {@code indexCount^2} is the maximum number of index queue entries.
+     *
+     * @return The default index count
      */
     @Override
     public int defaultIndexCount() {

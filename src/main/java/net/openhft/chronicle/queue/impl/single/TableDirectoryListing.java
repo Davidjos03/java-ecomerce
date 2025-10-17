@@ -29,6 +29,12 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.function.ToIntFunction;
 
+/**
+ * TableDirectoryListing manages the cycle metadata for a Chronicle Queue stored in a table.
+ * This class is responsible for keeping track of the minimum and maximum cycle numbers created in the queue.
+ * It ensures that the cycle information is properly synchronized and updated, allowing for the detection of new files
+ * and handling the queue's directory listing.
+ */
 class TableDirectoryListing extends AbstractCloseable implements DirectoryListing {
 
     private static final String HIGHEST_CREATED_CYCLE = "listing.highestCycle";
@@ -47,6 +53,13 @@ class TableDirectoryListing extends AbstractCloseable implements DirectoryListin
     private volatile LongValue modCount;
     private long lastRefreshTimeMS = 0;
 
+    /**
+     * Constructs a new TableDirectoryListing with the specified table store, queue path, and filename to cycle function.
+     *
+     * @param tableStore The table store that holds the cycle metadata.
+     * @param queuePath The path to the Chronicle Queue directory.
+     * @param fileNameToCycleFunction Function to convert filenames to cycle numbers.
+     */
     TableDirectoryListing(
             final @NotNull TableStore<?> tableStore,
             final Path queuePath,
@@ -61,12 +74,20 @@ class TableDirectoryListing extends AbstractCloseable implements DirectoryListin
         singleThreadedCheckDisabled(true);
     }
 
+    /**
+     * Ensures that this listing is only used for writable queues. Throws an exception if the table store is read-only.
+     *
+     * @param tableStore The table store to check.
+     */
     protected void checkReadOnly(@NotNull TableStore<?> tableStore) {
         if (tableStore.readOnly()) {
             throw new IllegalArgumentException(getClass().getSimpleName() + " should only be used for writable queues");
         }
     }
 
+    /**
+     * Initializes the directory listing by acquiring values from the table store.
+     */
     @Override
     public void init() {
         throwExceptionIfClosedInSetter();
@@ -81,12 +102,20 @@ class TableDirectoryListing extends AbstractCloseable implements DirectoryListin
         });
     }
 
+    /**
+     * Acquires the necessary LongValues (maxCycle, minCycle, modCount) from the table store.
+     */
     protected void initLongValues() {
         maxCycleValue = tableStore.acquireValueFor(HIGHEST_CREATED_CYCLE);
         minCycleValue = tableStore.acquireValueFor(LOWEST_CREATED_CYCLE);
         modCount = tableStore.acquireValueFor(MOD_COUNT);
     }
 
+    /**
+     * Refreshes the directory listing, updating the cycle values if needed. Only refreshes if the force flag is set.
+     *
+     * @param force Whether to force a refresh of the directory listing.
+     */
     @Override
     public void refresh(final boolean force) {
 
@@ -142,11 +171,22 @@ class TableDirectoryListing extends AbstractCloseable implements DirectoryListin
         }
     }
 
+    /**
+     * Handles the creation of a new file by updating the cycle metadata.
+     *
+     * @param file  The file that was created.
+     * @param cycle The cycle associated with the file.
+     */
     @Override
     public void onFileCreated(final File file, final int cycle) {
         onRoll(cycle);
     }
 
+    /**
+     * Updates the minimum and maximum cycle values when the queue rolls to a new cycle.
+     *
+     * @param cycle The new cycle number.
+     */
     @Override
     public void onRoll(int cycle) {
         minCycleValue.setMinValue(cycle);
@@ -154,39 +194,77 @@ class TableDirectoryListing extends AbstractCloseable implements DirectoryListin
         modCount.addAtomicValue(1);
     }
 
+    /**
+     * Returns the timestamp of the last directory listing refresh.
+     *
+     * @return The last refresh time in milliseconds.
+     */
     @Override
     public long lastRefreshTimeMS() {
         return lastRefreshTimeMS;
     }
 
+    /**
+     * Returns the highest cycle number created in the queue.
+     *
+     * @return The highest created cycle.
+     */
     @Override
     public int getMaxCreatedCycle() {
         return getMaxCycleValue();
     }
 
+    /**
+     * Returns the lowest cycle number created in the queue.
+     *
+     * @return The lowest created cycle.
+     */
     @Override
     public int getMinCreatedCycle() {
         return getMinCycleValue();
     }
 
+    /**
+     * Returns the modification count, representing how many times the directory listing has been modified.
+     *
+     * @return The modification count.
+     */
     @Override
     public long modCount() {
         return modCount.getVolatileValue();
     }
 
+    /**
+     * Provides a string representation of the table store's content in binary format.
+     *
+     * @return A string representing the table store's content.
+     */
     @Override
     public String toString() {
         return tableStore.dump(WireType.BINARY_LIGHT);
     }
 
+    /**
+     * Closes the directory listing by releasing resources associated with the LongValues.
+     */
     protected void performClose() {
         Closeable.closeQuietly(minCycleValue, maxCycleValue, modCount);
     }
 
+    /**
+     * Returns the volatile value of the maximum cycle.
+     *
+     * @return The maximum cycle value.
+     */
     private int getMaxCycleValue() {
         return (int) maxCycleValue.getVolatileValue();
     }
 
+    /**
+     * Returns the volatile value of the minimum cycle.
+     *
+     * @return The minimum cycle value.
+     */
     private int getMinCycleValue() {
         return (int) minCycleValue.getVolatileValue();
     }

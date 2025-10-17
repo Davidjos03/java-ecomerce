@@ -48,6 +48,11 @@ import java.util.concurrent.TimeUnit;
 import static net.openhft.chronicle.queue.impl.single.SingleChronicleQueue.WARN_SLOW_APPENDER_MS;
 import static net.openhft.chronicle.wire.Wires.*;
 
+/**
+ * This class represents an appender for a single chronicle queue, allowing for appending
+ * excerpts to the queue. It manages the cycle of the queue, lock handling, and the state
+ * of the wire and store.
+ */
 class StoreAppender extends AbstractCloseable
         implements ExcerptAppender, ExcerptContext, InternalAppender, MicroTouched {
 
@@ -84,6 +89,14 @@ class StoreAppender extends AbstractCloseable
     private Wire bufferWire = null;
     private int count = 0;
 
+    /**
+     * Constructor for StoreAppender. Initializes the appender by finding the first open cycle
+     * and setting up the appropriate resources for writing.
+     *
+     * @param queue           The chronicle queue to append to
+     * @param storePool       The pool for managing wire stores
+     * @param checkInterrupts Flag to indicate whether to check for interrupts during operations
+     */
     StoreAppender(@NotNull final SingleChronicleQueue queue,
                   @NotNull final WireStorePool storePool,
                   final boolean checkInterrupts) {
@@ -102,6 +115,7 @@ class StoreAppender extends AbstractCloseable
             final WriteLock writeLock = this.queue.writeLock();
             writeLock.lock();
             try {
+                // Process cycles and handle EOF markers
                 if (firstCycle != Integer.MAX_VALUE) {
                     // Backing down until EOF-ed cycle is encountered
                     for (int eofCycle = lastExistingCycle; eofCycle >= firstCycle; eofCycle--) {
@@ -137,6 +151,11 @@ class StoreAppender extends AbstractCloseable
         queue.addCloseListener(this);
     }
 
+    /**
+     * Checks if the current cycle has an end-of-file (EOF) marker.
+     *
+     * @return true if the cycle has an EOF marker, false otherwise
+     */
     private boolean cycleHasEOF() {
         if (wire != null) {
             assert this.queue.writeLock().locked();
@@ -155,18 +174,27 @@ class StoreAppender extends AbstractCloseable
         return false;
     }
 
+    /**
+     * Releases the resources associated with the given wire, if any.
+     *
+     * @param w the wire whose resources are to be released
+     */
     private static void releaseBytesFor(Wire w) {
         if (w != null) {
             w.bytes().release(INIT);
         }
     }
 
+    /**
+     * Checks the append lock to determine if appending is allowed. This version
+     * assumes that the process holding the lock is not the current process.
+     */
     private void checkAppendLock() {
         checkAppendLock(false);
     }
 
     /**
-     * check the appendLock
+     * Checks the append lock, with an option to allow the current process to bypass the lock.
      *
      * @param allowMyProcess this will only be true for any writes coming from the sink replicator
      */
@@ -175,6 +203,12 @@ class StoreAppender extends AbstractCloseable
             checkAppendLockLocked(allowMyProcess);
     }
 
+    /**
+     * Verifies if the append lock is held by another process and throws an exception if appending is not allowed.
+     * This method is called when the lock is held.
+     *
+     * @param allowMyProcess If true, the current process is allowed to append even if the lock is held.
+     */
     private void checkAppendLockLocked(boolean allowMyProcess) {
         // separate method as this is in fast path
         if (appendLock instanceof AbstractTSQueueLock) {
@@ -186,12 +220,15 @@ class StoreAppender extends AbstractCloseable
             if (allowMyProcess && myPID)
                 return;
             throw new IllegalStateException("locked: unable to append because a lock is being held by pid=" + (myPID ? "me" : lockedBy) + ", file=" + queue.file());
-        } else
+        } else {
             throw new IllegalStateException("locked: unable to append, file=" + queue.file());
+        }
     }
 
     /**
-     * @param marshallable to write to excerpt.
+     * Writes a marshallable object to the excerpt.
+     *
+     * @param marshallable The object to write into the excerpt.
      */
     @Override
     public void writeBytes(@NotNull final WriteBytesMarshallable marshallable) {
@@ -201,11 +238,16 @@ class StoreAppender extends AbstractCloseable
             Bytes<?> bytes = dc.wire().bytes();
             long wp = bytes.writePosition();
             marshallable.writeMarshallable(bytes);
+
+            // Rollback if no data was written
             if (wp == bytes.writePosition())
                 dc.rollbackOnClose();
         }
     }
 
+    /**
+     * Handles the cleanup when the appender is closed, releasing resources and closing the store.
+     */
     @Override
     protected void performClose() {
         releaseBytesFor(wireForIndex);
@@ -248,6 +290,11 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Executes a micro-touch, which may optimize small data access for this appender.
+     *
+     * @return true if the micro-touch operation is successful, false otherwise.
+     */
     @Override
     public boolean microTouch() {
         throwExceptionIfClosed();
@@ -258,6 +305,10 @@ class StoreAppender extends AbstractCloseable
         return microtoucher.execute();
     }
 
+    /**
+     * Performs a background micro-touch operation on this appender.
+     * Throws an exception if the appender is already closed.
+     */
     @Override
     public void bgMicroTouch() {
         if (isClosed())
@@ -269,37 +320,66 @@ class StoreAppender extends AbstractCloseable
         microtoucher.bgExecute();
     }
 
+    /**
+     * @return the wire associated with this appender.
+     */
     @Nullable
     @Override
     public Wire wire() {
         return wire;
     }
 
+    /**
+     * @return the wire used for indexing in this appender.
+     */
     @Nullable
     @Override
     public Wire wireForIndex() {
         return wireForIndex;
     }
 
+    /**
+     * @return the timeout in milliseconds for operations in this appender.
+     */
     @Override
     public long timeoutMS() {
         return queue.timeoutMS;
     }
 
+    /**
+     * Sets the last index written by this appender.
+     *
+     * @param index The last index to be set.
+     */
     void lastIndex(long index) {
         this.lastIndex = index;
     }
 
+    /**
+     * @return true if the appender should record history, false otherwise.
+     */
     @Override
     public boolean recordHistory() {
         return sourceId() != 0;
     }
 
+    /**
+     * Sets the cycle for this appender.
+     *
+     * @param cycle The cycle to be set.
+     */
     void setCycle(int cycle) {
         if (cycle != this.cycle)
             setCycle2(cycle, WireStoreSupplier.CreateStrategy.CREATE);
     }
 
+    /**
+     * Sets the cycle for this appender, managing the wire and store transitions if needed.
+     * It acquires a new store for the specified cycle and resets the wire positions accordingly.
+     *
+     * @param cycle          The cycle to set for the appender.
+     * @param createStrategy The strategy used to create a new store.
+     */
     private void setCycle2(final int cycle, final WireStoreSupplier.CreateStrategy createStrategy) {
         queue.throwExceptionIfClosed();
         if (cycle < 0)
@@ -312,6 +392,7 @@ class StoreAppender extends AbstractCloseable
 
         SingleChronicleQueueStore newStore = storePool.acquire(cycle, createStrategy, oldStore);
 
+        // If the store has changed, update and close the old one
         if (newStore != oldStore) {
             this.store = newStore;
             if (oldStore != null)
@@ -331,6 +412,12 @@ class StoreAppender extends AbstractCloseable
         queue.onRoll(cycle);
     }
 
+    /**
+     * Resets the wires (primary and indexing) for this appender based on the store.
+     * Releases any existing wire resources before creating new ones.
+     *
+     * @param queue The ChronicleQueue instance to reset wires for.
+     */
     private void resetWires(@NotNull final ChronicleQueue queue) {
         WireType wireType = queue.wireType();
         {
@@ -347,6 +434,13 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Creates a new wire for the appender based on the wire type and store bytes.
+     * Sets the padding based on the data version.
+     *
+     * @param wireType The wire type used to create the wire.
+     * @return The created Wire object.
+     */
     private Wire createWire(@NotNull final WireType wireType) {
         final Wire w = wireType.apply(store.bytes());
         w.usePadding(store.dataVersion() > 0);
@@ -354,8 +448,11 @@ class StoreAppender extends AbstractCloseable
     }
 
     /**
-     * @return true if the header number is changed, otherwise false
-     * @throws UnrecoverableTimeoutException todo
+     * Resets the position of the wire to the last write position and updates the header number.
+     * Verifies that the position and header number are valid and consistent.
+     *
+     * @return true if the header number changed, otherwise false.
+     * @throws UnrecoverableTimeoutException If a timeout occurs during the operation.
      */
     private boolean resetPosition() {
         long originalHeaderNumber = wire.headerNumber();
@@ -386,6 +483,12 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Checks the validity of the header position in the wire's bytes.
+     *
+     * @param bytes The Bytes object representing the wire's data.
+     * @return true if the header position is valid, otherwise false.
+     */
     private boolean checkPositionOfHeader(final Bytes<?> bytes) {
         if (positionOfHeader == 0) {
             return true;
@@ -402,6 +505,14 @@ class StoreAppender extends AbstractCloseable
         return writingDocument(false); // avoid overhead of a default method.
     }
 
+
+    /**
+     * Prepares and returns the write context for writing a document.
+     *
+     * @param metaData Whether the document contains metadata.
+     * @return The prepared DocumentContext for writing.
+     * @throws UnrecoverableTimeoutException If a timeout occurs while preparing the context.
+     */
     @NotNull
     @Override
     // throws UnrecoverableTimeoutException
@@ -418,6 +529,14 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Prepares and returns the {@link StoreAppenderContext} for writing data. This method checks if
+     * the context needs to be reopened, locks the writeLock, handles double buffering if enabled,
+     * and ensures the wire and cycle are set correctly for appending.
+     *
+     * @param metaData indicates if the write context is for metadata
+     * @return the prepared {@link StoreAppenderContext} ready for writing
+     */
     private StoreAppender.StoreAppenderContext prepareAndReturnWriteContext(boolean metaData) {
         if (count > 1) {
             assert metaData == context.metaData;
@@ -457,6 +576,10 @@ class StoreAppender extends AbstractCloseable
         return context;
     }
 
+    /**
+     * Prepares the buffer for double buffering during writes. This involves allocating an elastic
+     * buffer and associating it with the current wire type for temporary writing.
+     */
     private void prepareDoubleBuffer() {
         context.isClosed = false;
         context.rollbackOnClose = false;
@@ -469,6 +592,13 @@ class StoreAppender extends AbstractCloseable
         context.metaData(false);
     }
 
+    /**
+     * Acquires a document for writing, ensuring the context is prepared. If a document is already open
+     * in the context, it reuses the same context unless it's a new chain element.
+     *
+     * @param metaData indicates if the document is for metadata
+     * @return the current {@link DocumentContext} for writing
+     */
     @Override
     public DocumentContext acquireWritingDocument(boolean metaData) {
         if (!DISABLE_SINGLE_THREADED_CHECK)
@@ -479,7 +609,8 @@ class StoreAppender extends AbstractCloseable
     }
 
     /**
-     * Ensure any missing EOF markers are added back to previous cycles
+     * Ensures that EOF markers are properly added to all cycles, normalizing older cycles to ensure they are complete.
+     * This method locks the writeLock and calls the internal {@link #normaliseEOFs0(int)} method for each cycle.
      */
     public void normaliseEOFs() {
         long start = System.nanoTime();
@@ -495,6 +626,12 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Internal method to normalize EOFs for all cycles up to the specified cycle.
+     * Adds EOF markers where necessary and ensures all earlier cycles are finalized.
+     *
+     * @param cycle the target cycle up to which EOF normalization should occur
+     */
     private void normaliseEOFs0(int cycle) {
         int first = queue.firstCycle();
 
@@ -517,12 +654,26 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Ensures the wire is set for the specified cycle, normalizing EOFs as needed.
+     * If no wire exists, it creates a new wire for the current cycle.
+     *
+     * @param cycle the cycle for which the wire should be set
+     */
     private void setWireIfNull(final int cycle) {
         normaliseEOFs0(cycle);
 
         setCycle2(cycle, WireStoreSupplier.CreateStrategy.CREATE);
     }
 
+    /**
+     * Writes a header for the current wire, ensuring the correct position and header number
+     * is set for the next write operation.
+     *
+     * @param wire       the {@link Wire} to write the header to
+     * @param safeLength the safe length of data that can be written
+     * @return the position of the written header
+     */
     private long writeHeader(@NotNull final Wire wire, final long safeLength) {
         Bytes<?> bytes = wire.bytes();
         // writePosition points at the last record in the queue, so we can just skip it and we're ready for write
@@ -544,6 +695,13 @@ class StoreAppender extends AbstractCloseable
         return wire.enterHeader(safeLength);
     }
 
+    /**
+     * Opens a new write context for appending data, setting up the necessary parameters such as
+     * the header, write position, and metadata flag.
+     *
+     * @param metaData  indicates if the context is for metadata
+     * @param safeLength the maximum length of data that can be safely written
+     */
     private void openContext(final boolean metaData, final long safeLength) {
         assert wire != null;
         this.positionOfHeader = writeHeader(wire, safeLength); // sets wire.bytes().writePosition = position + 4;
@@ -554,8 +712,15 @@ class StoreAppender extends AbstractCloseable
         context.metaData(metaData);
     }
 
+    /**
+     * Checks if the current header number matches the expected sequence in the queue.
+     * Throws an {@link AssertionError} if there is a mismatch.
+     *
+     * @return true if the header number is valid, false otherwise
+     */
     boolean checkWritePositionHeaderNumber() {
         if (wire == null || wire.headerNumber() == Long.MIN_VALUE) return true;
+
         try {
             long pos = positionOfHeader;
 
@@ -569,8 +734,7 @@ class StoreAppender extends AbstractCloseable
                         " header: " + wire.headerNumber() +
                         " seq1: " + seq1 +
                         " seq2: " + seq2;
-                AssertionError ae = new AssertionError(message);
-                throw ae;
+                throw new AssertionError(message);
             }
         } catch (Exception e) {
             // TODO FIX
@@ -580,11 +744,22 @@ class StoreAppender extends AbstractCloseable
         return true;
     }
 
+    /**
+     * Returns the source ID of this appender's queue.
+     *
+     * @return the source ID
+     */
     @Override
     public int sourceId() {
         return queue.sourceId;
     }
 
+    /**
+     * Writes the provided {@link BytesStore} to the queue. Locks the queue before writing
+     * and ensures the wire and cycle are correctly set for the operation.
+     *
+     * @param bytes the {@link BytesStore} containing the data to be written
+     */
     @Override
     public void writeBytes(@NotNull final BytesStore<?, ?> bytes) {
         throwExceptionIfClosed();
@@ -616,10 +791,24 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Checks if the current wire is inside a valid header. For certain wire types, this method
+     * will validate if the current position is within a header.
+     *
+     * @param wire the {@link Wire} to check
+     * @return true if inside a valid header, false otherwise
+     */
     private boolean isInsideHeader(Wire wire) {
         return (wire instanceof AbstractWire) ? ((AbstractWire) wire).isInsideHeader() : true;
     }
 
+    /**
+     * Writes the provided {@link BytesStore} to the queue at the specified index.
+     * Acquires a write lock before performing the operation.
+     *
+     * @param index the index to write at
+     * @param bytes the data to be written
+     */
     @Override
     public void writeBytes(final long index, @NotNull final BytesStore<?, ?> bytes) {
         throwExceptionIfClosed();
@@ -707,6 +896,12 @@ class StoreAppender extends AbstractCloseable
         position0(position, startOfMessage, wire.bytes());
     }
 
+    /**
+     * Returns the index of the last appended entry. If no entries have been appended,
+     * it throws an exception indicating that no data has been appended yet.
+     *
+     * @return the last appended index
+     */
     @Override
     public long lastIndexAppended() {
         if (lastIndex != Long.MIN_VALUE)
@@ -726,6 +921,12 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Returns the current cycle of the queue. If the cycle has not been set, it will determine the
+     * cycle based on the last cycle or the current cycle of the queue.
+     *
+     * @return the current cycle
+     */
     @Override
     public int cycle() {
         if (cycle == Integer.MIN_VALUE) {
@@ -737,6 +938,11 @@ class StoreAppender extends AbstractCloseable
         return cycle;
     }
 
+    /**
+     * Returns the associated {@link SingleChronicleQueue} for this appender.
+     *
+     * @return the queue associated with this appender
+     */
     @Override
     @NotNull
     public SingleChronicleQueue queue() {
@@ -751,15 +957,23 @@ class StoreAppender extends AbstractCloseable
     void beforeAppend(final Wire wire, final long index) {
     }
 
-    /*
-     * wire must be not null when this method is called
+    /**
+     * Rolls the current cycle of the queue to the specified cycle, performing necessary
+     * operations such as writing EOF markers and switching the current wire and store.
+     *
+     * @param toCycle the target cycle to roll to
      */
-    // throws UnrecoverableTimeoutException
-
     private void rollCycleTo(final int toCycle) {
         rollCycleTo(toCycle, this.cycle > toCycle);
     }
 
+    /**
+     * Rolls the current cycle to the specified target cycle. If the cycle is being rolled
+     * forward, it writes EOF markers to the current wire before rolling.
+     *
+     * @param cycle       the target cycle to roll to
+     * @param suppressEOF flag to suppress writing EOF markers
+     */
     private void rollCycleTo(final int cycle, boolean suppressEOF) {
 
         // only a valid check if the wire was set.
@@ -773,6 +987,7 @@ class StoreAppender extends AbstractCloseable
 
         int lastExistingCycle = queue.lastCycle();
 
+        // If we're behind the target cycle, roll forward to the last existing cycle first
         if (lastExistingCycle < cycle && lastExistingCycle != this.cycle && lastExistingCycle >= 0) {
             setCycle2(lastExistingCycle, WireStoreSupplier.CreateStrategy.READ_ONLY);
             rollCycleTo(cycle);
@@ -781,17 +996,33 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
-    // throws UnrecoverableTimeoutException
+    /**
+     * Writes the index for a given position in the queue. This method updates the sequence number
+     * for the given index and associates it with the provided position.
+     *
+     * @param index    the index to write
+     * @param position the position associated with the index
+     * @throws StreamCorruptedException if the index is corrupted
+     */
     void writeIndexForPosition(final long index, final long position) throws StreamCorruptedException {
         long sequenceNumber = queue.rollCycle().toSequenceNumber(index);
         store.setPositionForSequenceNumber(this, sequenceNumber, position);
     }
 
+    /**
+     * Verifies that the index matches the expected sequence number for the given position.
+     * Throws an assertion error if the index is incorrect or if a discrepancy is found.
+     *
+     * @param index    the index to check
+     * @param position the position associated with the index
+     * @return true if the index is correct, false otherwise
+     */
     boolean checkIndex(final long index, final long position) {
         try {
             final long seq1 = queue.rollCycle().toSequenceNumber(index + 1) - 1;
             final long seq2 = store.sequenceForPosition(this, position, true);
 
+            // If the sequence numbers don't match, log an error and perform a linear scan
             if (seq1 != seq2) {
                 final long seq3 = store.indexing
                         .linearScanByPosition(wireForIndex(), position, 0, 0, true);
@@ -814,6 +1045,12 @@ class StoreAppender extends AbstractCloseable
         return true;
     }
 
+    /**
+     * Returns a string representation of the current state of the StoreAppender,
+     * including information about the queue, cycle, position, last index, and last position.
+     *
+     * @return a string representation of the StoreAppender
+     */
     @Override
     public String toString() {
         return "StoreAppender{" +
@@ -825,18 +1062,38 @@ class StoreAppender extends AbstractCloseable
                 '}';
     }
 
+    /**
+     * Sets the internal position and adjusts the {@link Bytes} instance to ensure the write limit
+     * and position are properly set. This method is used to manage the position of data within the
+     * queue.
+     *
+     * @param position        the position to set
+     * @param startOfMessage  the starting position of the message in the bytes
+     * @param bytes           the {@link Bytes} instance associated with the current wire
+     */
     void position0(final long position, final long startOfMessage, Bytes<?> bytes) {
         this.positionOfHeader = position;
         bytes.writeLimit(bytes.capacity());
         bytes.writePosition(startOfMessage);
     }
 
+    /**
+     * Returns the current file associated with this appender. If no store is available,
+     * returns null.
+     *
+     * @return the current file or null if no store is available
+     */
     @Override
     public File currentFile() {
         SingleChronicleQueueStore store = this.store;
         return store == null ? null : store.currentFile();
     }
 
+    /**
+     * Synchronizes the data to disk by ensuring that any data written to memory is persisted. This
+     * method is typically used for {@link MappedBytesStore} instances. If no store or wire is
+     * available, this method does nothing.
+     */
     @SuppressWarnings("rawtypes")
     @Override
     public void sync() {
@@ -852,16 +1109,28 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * Indicates whether the writing process is complete. This is determined by the context.
+     *
+     * @return true if writing is complete, false otherwise
+     */
     @Override
     public boolean writingIsComplete() {
         return context.writingIsComplete();
     }
 
+    /**
+     * Rolls back the current context if the writing process is not complete.
+     */
     @Override
     public void rollbackIfNotComplete() {
         context.rollbackIfNotComplete();
     }
 
+    /**
+     * Finalizer for the {@link StoreAppender}. If the appender is not properly closed, it rolls
+     * back the context and closes the resources, logging a warning.
+     */
     private class Finalizer {
         @SuppressWarnings({"deprecation", "removal"})
         @Override
@@ -872,6 +1141,10 @@ class StoreAppender extends AbstractCloseable
         }
     }
 
+    /**
+     * The inner class responsible for managing the context of a write operation in the {@link StoreAppender}.
+     * This context handles metadata, buffering, and rollback mechanisms for writing operations.
+     */
     final class StoreAppenderContext implements WriteDocumentContext {
 
         boolean isClosed = true;
@@ -884,11 +1157,19 @@ class StoreAppender extends AbstractCloseable
         private StackTrace closedHere;
         private boolean chainedElement;
 
+        /**
+         * Checks if the context is empty by examining the read remaining bytes of the wire.
+         *
+         * @return true if the context is empty, false otherwise
+         */
         public boolean isEmpty() {
             Bytes<?> bytes = wire().bytes();
             return bytes.readRemaining() == 0;
         }
 
+        /**
+         * Resets the context, clearing all flags and state variables.
+         */
         @Override
         public void reset() {
             isClosed = true;
@@ -899,21 +1180,42 @@ class StoreAppender extends AbstractCloseable
             chainedElement = false;
         }
 
+        /**
+         * Returns the source ID associated with the current queue.
+         *
+         * @return the source ID
+         */
         @Override
         public int sourceId() {
             return StoreAppender.this.sourceId();
         }
 
+        /**
+         * Indicates whether the context is currently present. This always returns false as
+         * this method is intended for metadata-only contexts.
+         *
+         * @return false always
+         */
         @Override
         public boolean isPresent() {
             return false;
         }
 
+        /**
+         * Returns the wire associated with this context.
+         *
+         * @return the wire for this context
+         */
         @Override
         public Wire wire() {
             return wire;
         }
 
+        /**
+         * Indicates whether the data being written is metadata.
+         *
+         * @return true if the data is metadata, false otherwise
+         */
         @Override
         public boolean isMetaData() {
             return metaData;
@@ -927,15 +1229,20 @@ class StoreAppender extends AbstractCloseable
             this.rollbackOnClose = true;
         }
 
+        /**
+         * Closes the context, committing or rolling back the changes depending on the state.
+         */
         @Override
         public void close() {
             close(true);
         }
 
         /**
-         * Close this {@link StoreAppenderContext}.
+         * Close this {@link StoreAppenderContext}, finalizing the writing process and releasing
+         * resources. Depending on the conditions, this method either commits the written data,
+         * rolls it back, or clears the buffer.
          *
-         * @param unlock true if the {@link this#writeLock} should be unlocked.
+         * @param unlock true if the {@link StoreAppender#writeLock} should be unlocked.
          */
         public void close(boolean unlock) {
             if (!closePreconditionsAreSatisfied()) return;
@@ -966,6 +1273,12 @@ class StoreAppender extends AbstractCloseable
             }
         }
 
+        /**
+         * Rolls back the context when necessary. Returns true if rollback was performed,
+         * otherwise false.
+         *
+         * @return true if rollback was performed, false otherwise
+         */
         private boolean handleRollbackOnClose() {
             if (rollbackOnClose) {
                 doRollback();
@@ -975,7 +1288,11 @@ class StoreAppender extends AbstractCloseable
         }
 
         /**
-         * @return true if close preconditions are satisfied, otherwise false.
+         * Ensures that all preconditions for closing the context are satisfied. If not, the method
+         * will either skip the closing process or log a warning if the context has already been
+         * closed.
+         *
+         * @return true if preconditions for closing are met, false otherwise
          */
         private boolean closePreconditionsAreSatisfied() {
             if (chainedElement)
@@ -1006,6 +1323,12 @@ class StoreAppender extends AbstractCloseable
                 throw new InterruptedException();
         }
 
+        /**
+         * Updates the header and index after writing. Ensures that the correct position is stored
+         * and, if needed, notifies listeners about the appending process.
+         *
+         * @throws StreamCorruptedException if there is an error updating the header
+         */
         private void updateHeaderAndIndex() throws StreamCorruptedException {
             if (wire == null) throw new NullPointerException("Wire must not be null");
             if (store == null) throw new NullPointerException("Store must not be null");
@@ -1033,9 +1356,10 @@ class StoreAppender extends AbstractCloseable
         }
 
         /**
-         * Clean-up after close.
+         * Performs cleanup tasks after closing the context. This includes setting the write position
+         * and unlocking the {@link StoreAppender#writeLock} if needed.
          *
-         * @param unlock true if the {@link this#writeLock} should be unlocked.
+         * @param unlock true if the {@link StoreAppender#writeLock} should be unlocked.
          */
         private void closeCleanup(boolean unlock) {
             if (wire == null) throw new NullPointerException("Wire must not be null");
@@ -1051,6 +1375,10 @@ class StoreAppender extends AbstractCloseable
             }
         }
 
+        /**
+         * Calls the appender listener to process the excerpt at the current position.
+         * The read and write positions of the wire are preserved during this operation.
+         */
         private void callAppenderListener() {
             final Bytes<?> bytes = wire.bytes();
             long rp = bytes.readPosition();
@@ -1063,6 +1391,11 @@ class StoreAppender extends AbstractCloseable
             }
         }
 
+        /**
+         * Rolls back the current write operation, clearing any data that was written during the
+         * current context. This ensures that no incomplete or erroneous data is committed to the
+         * queue.
+         */
         private void doRollback() {
             if (buffered) {
                 assert wire != StoreAppender.this.wire;
@@ -1086,6 +1419,12 @@ class StoreAppender extends AbstractCloseable
             }
         }
 
+        /**
+         * Returns the index of the current context. If the context is using double buffering, an
+         * {@link IndexNotAvailableException} will be thrown as the index is not available in this case.
+         *
+         * @return the index of the current context or {@link Long#MIN_VALUE} if the index is unavailable
+         */
         @Override
         public long index() {
             if (buffered) {
@@ -1107,39 +1446,70 @@ class StoreAppender extends AbstractCloseable
             return isMetaData() ? Long.MIN_VALUE : this.wire.headerNumber() + 1;
         }
 
+        /**
+         * @return true if the context is still open and not yet closed
+         */
         @Override
         public boolean isOpen() {
             return !isClosed;
         }
 
+        /**
+         * @return true if the context has not been fully completed yet
+         */
         @Override
         public boolean isNotComplete() {
             return !isClosed;
         }
 
+        /**
+         * Unsupported operation in this context.
+         *
+         * @throws UnsupportedOperationException if this method is called
+         */
         @Override
         public void start(boolean metaData) {
             throw new UnsupportedOperationException();
         }
 
+        /**
+         * Sets whether the context is for metadata or not.
+         *
+         * @param metaData true if the context is for metadata, false otherwise
+         */
         public void metaData(boolean metaData) {
             this.metaData = metaData;
         }
 
+        /**
+         * @return true if the context is part of a chained operation, false otherwise
+         */
         @Override
         public boolean chainedElement() {
             return chainedElement;
         }
 
+        /**
+         * Sets whether the context is part of a chained operation.
+         *
+         * @param chainedElement true if the context is part of a chain, false otherwise
+         */
         @Override
         public void chainedElement(boolean chainedElement) {
             this.chainedElement = chainedElement;
         }
 
+        /**
+         * @return true if the writing process has been completed and the context is closed
+         */
         public boolean writingIsComplete() {
             return isClosed;
         }
 
+        /**
+         * Rolls back the context if the writing process was not completed. This ensures that no
+         * incomplete data is written to the queue.
+         */
         @Override
         public void rollbackIfNotComplete() {
             if (isClosed) return;

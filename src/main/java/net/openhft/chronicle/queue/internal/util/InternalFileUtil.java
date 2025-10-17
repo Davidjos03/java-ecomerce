@@ -35,7 +35,10 @@ import static java.util.Comparator.comparing;
 import static java.util.stream.Collectors.toList;
 
 /**
- * Utility methods for handling Files in connection with ChronicleQueue.
+ * InternalFileUtil provides utility methods for handling files related to Chronicle Queue operations.
+ * It offers functionality for determining which files are safe to remove, checking file states, and fetching open files on the system.
+ * <p>
+ * These methods are used internally for managing file system interactions that are specific to queue operations, especially on Unix-like systems.
  *
  * @author Per Minborg
  * @since 5.17.34
@@ -187,6 +190,11 @@ public final class InternalFileUtil {
         return FileState.UNDETERMINED;
     }
 
+    /**
+     * Verifies if the current OS supports retrieving open files via {@link #getAllOpenFiles()}.
+     *
+     * @throws UnsupportedOperationException if the OS does not support file querying
+     */
     private static void assertOsSupported() {
         if (!getAllOpenFilesIsSupportedOnOS()) {
             throw new UnsupportedOperationException("This operation is not supported on your operating system");
@@ -216,6 +224,9 @@ public final class InternalFileUtil {
         return visitor.openFiles;
     }
 
+    /**
+     * Helper class to walk through the "/proc" directory and collect information about open files on Unix-like systems.
+     */
     private static class ProcFdWalker extends SimpleFileVisitor<Path> {
 
         private final static int PID_PATH_INDEX = 1; // where is the pid for process holding file open represented in path?

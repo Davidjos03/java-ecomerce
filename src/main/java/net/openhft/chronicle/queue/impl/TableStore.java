@@ -23,6 +23,15 @@ import net.openhft.chronicle.queue.impl.table.TableStoreIterator;
 
 import java.util.function.Function;
 
+/**
+ * The {@code TableStore} interface provides a way to manage and access values within a mapped file, offering atomic operations
+ * and support for concurrent access across multiple threads and processes.
+ *
+ * <p>The table store maintains mappings of keys to {@link LongValue}s and provides mechanisms for atomic updates,
+ * acquiring exclusive file-system locks, and iterating over keys.
+ *
+ * @param <T> The type of metadata associated with the table store, extending {@link Metadata}.
+ */
 public interface TableStore<T extends Metadata> extends CommonStore, ManagedCloseable {
 
     /**
@@ -46,8 +55,22 @@ public interface TableStore<T extends Metadata> extends CommonStore, ManagedClos
         return acquireValueFor(key, Long.MIN_VALUE);
     }
 
+    /**
+     * Acquires a {@link LongValue} for the given key, initializing it with the specified default value if not found.
+     *
+     * @param key          the key for which to acquire the {@link LongValue}
+     * @param defaultValue the default value to initialize with if the key is not found
+     * @return {@link LongValue} object pointing to the corresponding location in the mapped file
+     */
     LongValue acquireValueFor(CharSequence key, long defaultValue);
 
+    /**
+     * Iterates over each key in the table store and applies the given {@link TableStoreIterator} on it.
+     *
+     * @param <A>          the type of the accumulator
+     * @param accumulator  the accumulator to collect results
+     * @param tsIterator   the iterator to process each key
+     */
     <A> void forEachKey(A accumulator, TableStoreIterator<A> tsIterator);
 
     /**
@@ -63,8 +86,18 @@ public interface TableStore<T extends Metadata> extends CommonStore, ManagedClos
      */
     <R> R doWithExclusiveLock(Function<TableStore<T>, ? extends R> code);
 
+    /**
+     * Retrieves the metadata associated with this table store.
+     *
+     * @return metadata of type {@link T}
+     */
     T metadata();
 
+    /**
+     * Checks if the table store is in read-only mode.
+     *
+     * @return {@code true} if the table store is read-only, {@code false} otherwise
+     */
     default boolean readOnly() {
         return false;
     }

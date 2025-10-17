@@ -48,6 +48,13 @@ import static net.openhft.chronicle.core.io.Closeable.closeQuietly;
 import static net.openhft.chronicle.queue.RollCycle.MAX_INDEX_COUNT;
 import static net.openhft.chronicle.wire.Wires.NOT_INITIALIZED;
 
+/**
+ * SCQIndexing is responsible for managing index structures within a {@link SingleChronicleQueue}.
+ * It stores and tracks positions of entries in a chronicle queue, optimizing access and scans for entries.
+ * This class also maintains thread-local storage for index arrays and is capable of managing
+ * write positions for entries.
+ */
+@SuppressWarnings("deprecation")
 class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable, WriteMarshallable, Closeable {
     private static final boolean IGNORE_INDEXING_FAILURE = Jvm.getBoolean("queue.ignoreIndexingFailure");
     private static final boolean REPORT_LINEAR_SCAN = Jvm.getBoolean("chronicle.queue.report.linear.scan.latency");
@@ -82,9 +89,9 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
     private long lastScannedIndex = -1;
 
     /**
-     * used by {@link Demarshallable}
+     * Constructor used for demarshalling via {@link Demarshallable}.
      *
-     * @param wire a wire
+     * @param wire The input wire to read from.
      */
     @UsedViaReflection
     private SCQIndexing(@NotNull WireIn wire) {
@@ -95,6 +102,13 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                 wire::newLongArrayReference);
     }
 
+    /**
+     * Constructor to create an {@code SCQIndexing} instance using a specific wire type.
+     *
+     * @param wireType    The wire type used for creating the index structure.
+     * @param indexCount  The count of indexes.
+     * @param indexSpacing The spacing between indexes.
+     */
     SCQIndexing(@NotNull WireType wireType, int indexCount, int indexSpacing) {
         this(indexCount,
                 indexSpacing,
@@ -103,6 +117,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                 wireType.newLongArrayReference());
     }
 
+    /**
+     * Main constructor to initialize indexing with required parameters.
+     *
+     * @param indexCount         The count of indexes to maintain.
+     * @param indexSpacing       The spacing between indexes.
+     * @param index2Index        Reference for storing index-to-index values.
+     * @param nextEntryToBeIndexed Reference for tracking the next entry to be indexed.
+     * @param longArraySupplier  Supplier for creating long array values.
+     */
     private SCQIndexing(int indexCount, int indexSpacing, LongValue index2Index, LongValue nextEntryToBeIndexed, Supplier<LongArrayValues> longArraySupplier) {
         this.indexCount = indexCount;
         this.indexCountBits = Maths.intLog2(indexCount);
@@ -118,6 +141,7 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         singleThreadedCheckDisabled(true);
     }
 
+    // Helper method to create a new LongArrayValuesHolder
     private LongArrayValuesHolder newLogArrayValuesHolder(Supplier<LongArrayValues> las) {
         LongArrayValues values = las.get();
         LongArrayValuesHolder longArrayValuesHolder = new LongArrayValuesHolder(values);
@@ -125,11 +149,13 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return longArrayValuesHolder;
     }
 
+    // Fetches the index-to-index array from thread-local storage.
     @NotNull
     private LongArrayValuesHolder getIndex2IndexArray() {
         return ThreadLocalHelper.getTL(index2indexArray, longArraySupplier, arrayValuesSupplierCall);
     }
 
+    // Fetches the index array from thread-local storage.
     @NotNull
     private LongArrayValuesHolder getIndexArray() {
         return ThreadLocalHelper.getTL(indexArray, longArraySupplier, arrayValuesSupplierCall);
@@ -151,11 +177,9 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return mask & siftedIndex;
     }
 
-/*    @Override
-    protected boolean performCloseInBackground() {
-        return true;
-    }*/
-
+    /**
+     * Closes this indexing instance, releasing resources.
+     */
     @Override
     protected void performClose() {
         closeQuietly(index2Index, nextEntryToBeIndexed);
@@ -168,6 +192,7 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         closeTL(index2indexArray);
     }
 
+    // Helper method to close a thread-local LongArrayValuesHolder.
     private void closeTL(ThreadLocal<WeakReference<LongArrayValuesHolder>> tl) {
         WeakReference<LongArrayValuesHolder> weakReference = tl.get();
         if (weakReference == null)
@@ -177,6 +202,13 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
             closeQuietly(holder.values());
     }
 
+    /**
+     * Serializes the indexing fields of this class to the provided {@link WireOut} object.
+     * The fields include the index count, index spacing, and binding the {@code index2Index}
+     * and {@code nextEntryToBeIndexed} fields.
+     *
+     * @param wire The {@link WireOut} object to which the data is written.
+     */
     @Override
     public void writeMarshallable(@NotNull WireOut wire) {
         wire.write(IndexingFields.indexCount).int64(indexCount)
@@ -185,6 +217,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                 .write(IndexingFields.lastIndex).int64forBinding(0L, nextEntryToBeIndexed);
     }
 
+    /**
+     * Retrieves the {@link LongArrayValues} stored at the specified secondary address within the wire.
+     * If the secondary address matches the previously used address, the cached array is returned.
+     * Otherwise, the new array is read from the wire.
+     *
+     * @param wire The wire containing the array data.
+     * @param secondaryAddress The address to fetch the array from.
+     * @return The {@link LongArrayValues} at the specified address.
+     */
     @NotNull
     private LongArrayValues arrayForAddress(@NotNull Wire wire, long secondaryAddress) {
         LongArrayValuesHolder holder = getIndexArray();
@@ -196,6 +237,14 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return array(wire, holder.values(), false);
     }
 
+    /**
+     * Reads an array of {@link LongArrayValues} from the wire and fills the specified {@code using} array.
+     *
+     * @param w The wire to read the array from.
+     * @param using The {@link LongArrayValues} instance to populate.
+     * @param index2index Whether the array being read is the index2index array.
+     * @return The populated {@link LongArrayValues} instance.
+     */
     @NotNull
     private LongArrayValues array(@NotNull WireIn w, @NotNull LongArrayValues using, boolean index2index) {
         @NotNull final ValueIn valueIn = readIndexValue(w, index2index ? "index2index" : "index");
@@ -204,6 +253,14 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return using;
     }
 
+    /**
+     * Reads a value from the wire and checks if the event name matches the expected name.
+     * Throws an {@link IllegalStateException} if the names do not match.
+     *
+     * @param w The wire to read the value from.
+     * @param expectedName The expected event name.
+     * @return The {@link ValueIn} corresponding to the expected event.
+     */
     private ValueIn readIndexValue(@NotNull WireIn w, @NotNull String expectedName) {
         try (ScopedResource<StringBuilder> stlSb = Wires.acquireStringBuilderScoped()) {
             final StringBuilder sb = stlSb.get();
@@ -269,6 +326,13 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return value;
     }
 
+    /**
+     * Performs a linear scan from the start of the wire to find the specified {@code index}.
+     *
+     * @param ec The excerpt context used for reading the index.
+     * @param index The index to find.
+     * @return A {@link ScanResult} indicating the result of the operation.
+     */
     @NotNull
     private ScanResult moveToIndexFromTheStart(@NotNull ExcerptContext ec, long index) {
         try {
@@ -285,7 +349,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return ScanResult.NOT_FOUND;
     }
 
-    // visible for testing
+    /**
+     * Attempts to move the context to the specified {@code index}. This method navigates through the index structure
+     * stored in the wire and retrieves the corresponding address. It begins by using the primary index (index2index)
+     * to locate the secondary index, and then performs a backwards scan in the secondary index.
+     *
+     * @param ec    The {@link ExcerptContext} used for reading the index.
+     * @param index The index to move to.
+     * @return A {@link ScanResult} indicating the result of the operation, or {@code null} if the index cannot be found.
+     */
     @Nullable
     ScanResult moveToIndex0(@NotNull final ExcerptContext ec, final long index) {
         if (index2Index.getVolatileValue() == NOT_INITIALIZED)
@@ -312,7 +384,17 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return null;
     }
 
-
+    /**
+     * Performs a backwards scan of the secondary index to locate the specified {@code index}. If the index is found,
+     * the position is moved to the address corresponding to the index. Otherwise, it performs a linear scan from
+     * the starting point.
+     *
+     * @param ec         The {@link ExcerptContext} used for reading the index.
+     * @param array1     The secondary index to scan.
+     * @param startIndex The starting index of the scan.
+     * @param index      The target index to find.
+     * @return A {@link ScanResult} indicating whether the index was found, or if a linear scan is required.
+     */
     private ScanResult scanSecondaryIndexBackwards(@NotNull final ExcerptContext ec, LongArrayValues array1, long startIndex, long index) {
         long secondaryOffset = toAddress1(index);
 
@@ -364,6 +446,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return scanResult;
     }
 
+    /**
+     * Prints the time taken for a linear scan operation, if it exceeds a threshold.
+     * The method also records a stack trace if debugging is enabled.
+     *
+     * @param toIndex        The target index.
+     * @param fromKnownIndex The known starting index.
+     * @param start          The start time of the scan.
+     * @param desc           A description of the scan operation.
+     */
     private void printLinearScanTime(long toIndex, long fromKnownIndex, long start, String desc) {
         // still warming up?
         if (toIndex <= 1)
@@ -377,6 +468,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         doPrintLinearScanTime(toIndex, fromKnownIndex, start, desc, end);
     }
 
+    /**
+     * Logs the details of a linear scan operation that took longer than expected, along with a stack trace if debugging is enabled.
+     *
+     * @param toIndex        The target index.
+     * @param fromKnownIndex The known starting index.
+     * @param start          The start time of the scan.
+     * @param desc           A description of the scan operation.
+     * @param end            The end time of the scan.
+     */
     private void doPrintLinearScanTime(long toIndex, long fromKnownIndex, long start, String desc, long end) {
         StackTrace st = null;
         if (Jvm.isDebugEnabled(getClass())) {
@@ -392,6 +492,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         Jvm.perf().on(getClass(), message, st);
     }
 
+    /**
+     * Performs the actual linear scan operation from a known index and address to the target {@code toIndex}.
+     *
+     * @param wire           The wire used to read the data.
+     * @param toIndex        The target index to reach.
+     * @param fromKnownIndex The known starting index.
+     * @param knownAddress   The address corresponding to the known starting index.
+     * @return A {@link ScanResult} indicating the outcome of the scan.
+     */
     @NotNull
     private ScanResult linearScan0(@NotNull final Wire wire,
                                    final long toIndex,
@@ -437,10 +546,33 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         }
     }
 
+    /**
+     * Performs a linear scan from a known index and address to a target {@code toIndex}.
+     * This method leverages the wire's data and metadata headers to navigate the records
+     * within the Chronicle Queue.
+     *
+     * @param toIndex      The target index to scan to.
+     * @param knownIndex   A known index to start the scan from.
+     * @param ec           The {@link ExcerptContext} used for reading the index.
+     * @param knownAddress The address corresponding to the known index.
+     * @return A {@link ScanResult} indicating the outcome of the scan.
+     */
     ScanResult linearScanTo(final long toIndex, final long knownIndex, final ExcerptContext ec, final long knownAddress) {
         return linearScan(ec.wire(), toIndex, knownIndex, knownAddress);
     }
 
+    /**
+     * Performs a linear scan by position to locate the entry at the specified {@code toPosition}.
+     * This method returns the index of the entry or an exception if the position is not valid.
+     *
+     * @param wire        The wire object used to read the data.
+     * @param toPosition  The target position in the wire.
+     * @param indexOfNext The index of the next known entry.
+     * @param startAddress The starting address to begin the scan from.
+     * @param inclusive   Whether the target position should be inclusive.
+     * @return The index of the found entry.
+     * @throws EOFException If the scan reaches the end of the file before finding the position.
+     */
     long linearScanByPosition(@NotNull final Wire wire,
                               final long toPosition,
                               final long indexOfNext,
@@ -454,6 +586,19 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return index;
     }
 
+    /**
+     * Helper method to perform the actual linear scan by position. This method reads through
+     * the wire's entries, navigating based on position and header type, until it finds the
+     * required position or reaches the end of the wire.
+     *
+     * @param wire         The wire object used to read the data.
+     * @param toPosition   The target position in the wire.
+     * @param indexOfNext  The index of the next known entry.
+     * @param startAddress The starting address to begin the scan from.
+     * @param inclusive    Whether the target position should be inclusive.
+     * @return The index of the found entry.
+     * @throws EOFException If the scan reaches the end of the file before finding the position.
+     */
     long linearScanByPosition0(@NotNull final Wire wire,
                                final long toPosition,
                                long indexOfNext,
@@ -463,12 +608,14 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         assert toPosition >= 0;
         Bytes<?> bytes = wire.bytes();
         long i;
-        // optimized if the `toPosition` is the writePosition
+
+        // Optimized path if the `toPosition` is the last written position.
         long lastAddress = writePosition.getVolatileValue();
         long lastIndex = this.sequence.getSequence(lastAddress);
 
         i = calculateInitialValue(toPosition, indexOfNext, startAddress, bytes, lastAddress, lastIndex);
 
+        // Scan through the entries until the target position is found or exceeded.
         while (bytes.readPosition() <= toPosition) {
             WireIn.HeaderType headerType = wire.readDataHeader(true);
             if (headerType == WireIn.HeaderType.EOF) {
@@ -482,6 +629,7 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
 
             switch (headerType) {
                 case NONE:
+                    // Case where no data header is found
                     if (toPosition == Long.MAX_VALUE) {
                         return i;
                     }
@@ -490,17 +638,21 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                     throwIndexNotWritten(toPosition, startAddress, bytes, header);
                     break;
                 case META_DATA:
+                    // Skip metadata
                     break;
                 case DATA:
+                    // Increment the index for each valid data entry
                     ++i;
                     break;
                 case EOF:
                     throw new AssertionError("EOF should have been handled");
             }
 
+            // If the current position matches the target, return the index
             if (bytes.readPosition() == toPosition)
                 return i;
 
+            // Skip over the current entry
             int header = bytes.readVolatileInt();
             int len = Wires.lengthOf(header);
             assert Wires.isReady(header);
@@ -510,6 +662,18 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return throwPositionNotAtStartOfMessage(toPosition, bytes);
     }
 
+    /**
+     * Calculates the initial index value to start scanning from, based on whether
+     * the target position is the last written position or a known earlier position.
+     *
+     * @param toPosition   The target position in the wire.
+     * @param indexOfNext  The index of the next known entry.
+     * @param startAddress The starting address for the scan.
+     * @param bytes        The bytes object associated with the wire.
+     * @param lastAddress  The address of the last written entry.
+     * @param lastIndex    The index of the last written entry.
+     * @return The starting index for the scan.
+     */
     private long calculateInitialValue(long toPosition, long indexOfNext, long startAddress, Bytes<?> bytes, long lastAddress, long lastIndex) {
         if (lastAddress > 0 && toPosition == lastAddress
                 && lastIndex != Sequence.NOT_FOUND && lastIndex != Sequence.NOT_FOUND_RETRY) {
@@ -521,6 +685,14 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         }
     }
 
+    /**
+     * Throws an exception if an index is requested for an entry that hasn't been written yet.
+     *
+     * @param toPosition   The target position in the wire.
+     * @param startAddress The starting address for the scan.
+     * @param bytes        The bytes object associated with the wire.
+     * @param header       The header of the current entry.
+     */
     private void throwIndexNotWritten(long toPosition, long startAddress, Bytes<?> bytes, int header) {
         throw new IllegalArgumentException(
                 "You can't know the index for an entry which hasn't been written. " +
@@ -530,6 +702,14 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                         ", toPos: " + toPosition);
     }
 
+    /**
+     * Throws an exception if the position is not at the start of a message, meaning the scan failed
+     * to locate a valid message at the specified position.
+     *
+     * @param toPosition The target position in the wire.
+     * @param bytes      The bytes object associated with the wire.
+     * @return A long indicating the failure.
+     */
     private long throwPositionNotAtStartOfMessage(long toPosition, Bytes<?> bytes) {
         throw new IllegalArgumentException("position not the start of a message, bytes" +
                 ".readPosition()=" + bytes.readPosition() + ",toPosition=" + toPosition);
@@ -540,6 +720,17 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return nextEntryToBeIndexed.getVolatileValue();
     }
 
+    /**
+     * Returns the sequence number for a given position in the wire.
+     * If an exact match is found for the position, the corresponding index is returned;
+     * otherwise, a linear scan is performed to approximate the closest sequence.
+     *
+     * @param ec        The {@link ExcerptContext} used to navigate the queue.
+     * @param position  The position for which the sequence is requested.
+     * @param inclusive Whether the position should be treated inclusively.
+     * @return The sequence number for the given position, or an approximation based on the linear scan.
+     * @throws StreamCorruptedException If the index is corrupted or not initialized properly.
+     */
     long sequenceForPosition(@NotNull ExcerptContext ec,
                              final long position,
                              boolean inclusive) throws StreamCorruptedException {
@@ -549,6 +740,8 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         try {
             final LongArrayValues index2indexArr = getIndex2index(wire);
             int used2 = getUsedAsInt(index2indexArr);
+
+            // Outer loop: Iterate through index2index array to find the relevant secondary index.
             Outer:
             for (int index2 = used2 - 1; index2 >= 0; index2--) {
                 long secondaryAddress = getSecondaryAddress(wire, index2indexArr, index2);
@@ -563,11 +756,13 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                 if (used == 0)
                     continue;
 
+                // Check if the first value in the index is appropriate.
                 long posN = indexValues.getVolatileValueAt(0);
                 assert posN >= 0;
                 if (posN > position)
                     continue;
 
+                // Inner loop: Search within the secondary index.
                 for (int index1 = used - 1; index1 >= 0; index1--) {
                     long pos = indexValues.getVolatileValueAt(index1);
                     // TODO pos shouldn't be 0, but holes in the index appear..
@@ -588,12 +783,20 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
                 Jvm.debug().on(getClass(), "Attempt to find " + Long.toHexString(position), e);
         }
         try {
+            // Perform a linear scan if no exact match is found.
             return linearScanByPosition(wire, position, indexOfNext, lastKnownAddress, inclusive);
         } catch (EOFException e) {
             throw new UncheckedIOException(e);
         }
     }
 
+    /**
+     * Retrieves the number of entries used in the given {@link LongArrayValues}.
+     * Validates that the number of entries is within the expected range.
+     *
+     * @param index2indexArr The {@link LongArrayValues} representing the index.
+     * @return The number of entries used, as an integer.
+     */
     static int getUsedAsInt(LongArrayValues index2indexArr) {
         if (((Byteable) index2indexArr).bytesStore() == null)
             return 0;
@@ -604,13 +807,20 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return (int) used;
     }
 
+    /**
+     * Initializes the index and sets up the index2index and other structures required for indexing.
+     * This method sets the position and creates new entries in the index.
+     *
+     * @param wire The {@link Wire} object used to write to the queue.
+     * @throws StreamCorruptedException If the index is corrupted or not initialized properly.
+     */
     void initIndex(@NotNull Wire wire) throws StreamCorruptedException {
         long index2Index = this.index2Index.getVolatileValue();
 
         if (index2Index != NOT_INITIALIZED)
             throw new IllegalStateException("Who wrote the index2index?");
 
-        // Ensure new header position is found despite first header not being finalized
+        // Ensure new header position is found despite the first header not being finalized.
         long oldPos = wire.bytes().writePosition();
         if (!writePosition.compareAndSwapValue(0, oldPos))
             throw new IllegalStateException("Who updated the position?");
@@ -621,11 +831,18 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         LongArrayValues index2index = getIndex2index(wire);
         newIndex(wire, index2index, 0);
 
-        // Reset position as it were
+        // Reset the position to its original value.
         if (!writePosition.compareAndSwapValue(oldPos, 0))
             throw new IllegalStateException("Who reset the position?");
     }
 
+    /**
+     * Retrieves the {@link LongArrayValues} for the index2index array. If the index2index array
+     * has not been initialized, it reads it from the provided {@link Wire}.
+     *
+     * @param wire The wire object used to read from the queue.
+     * @return The {@link LongArrayValues} representing the index2index array.
+     */
     @SuppressWarnings("try")
     private LongArrayValues getIndex2index(@NotNull Wire wire) {
 
@@ -709,14 +926,32 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         nextEntryToBeIndexed.setMaxValue(sequenceNumber + indexSpacing);
     }
 
+    /**
+     * Throws an {@link IllegalStateException} if an invalid secondary address is encountered.
+     *
+     * @param secondaryAddress The secondary address that caused the error.
+     */
     private void throwSecondaryAddressError(long secondaryAddress) {
         throw new IllegalStateException("sa2: " + secondaryAddress);
     }
 
+    /**
+     * Throws an {@link IllegalStateException} when the sequence number exceeds the allowed maximum
+     * number of entries for the current roll cycle.
+     *
+     * @param sequenceNumber The sequence number that exceeds the roll cycle's entry limit.
+     */
     private void throwNumEntriesExceededForRollCycle(long sequenceNumber) {
         throw new IllegalStateException("Unable to index " + sequenceNumber + ", the number of entries exceeds max number for the current rollcycle");
     }
 
+    /**
+     * Determines if the given index is indexable based on the current index spacing.
+     * An index is indexable if it aligns with the defined index spacing.
+     *
+     * @param index The index to check for indexability.
+     * @return {@code true} if the index is indexable, otherwise {@code false}.
+     */
     @Override
     public boolean indexable(long index) {
         throwExceptionIfClosed();
@@ -724,6 +959,15 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return (index & (indexSpacing - 1)) == 0;
     }
 
+    /**
+     * Retrieves the last sequence number in the queue.
+     * This method attempts to retrieve the sequence number based on the current write position and may use
+     * a linear scan if the exact sequence is not readily available.
+     *
+     * @param ec The {@link ExcerptContext} used to navigate the queue.
+     * @return The last sequence number, or {@code -1} if it cannot be found.
+     * @throws StreamCorruptedException If the sequence cannot be determined due to corruption.
+     */
     @Override
     public long lastSequenceNumber(@NotNull ExcerptContext ec)
             throws StreamCorruptedException {
@@ -753,16 +997,34 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return sequenceForPosition(ec, Long.MAX_VALUE, false);
     }
 
+    /**
+     * Returns the number of indices available in the current roll cycle.
+     *
+     * @return The number of indices.
+     */
     @Override
     public int indexCount() {
         return indexCount;
     }
 
+    /**
+     * Returns the spacing between indexed entries.
+     * Index spacing defines how frequently entries are indexed.
+     *
+     * @return The index spacing.
+     */
     @Override
     public int indexSpacing() {
         return indexSpacing;
     }
 
+    /**
+     * Moves to the end of the wire, scanning for the final sequence.
+     * This method attempts to locate the last written entry in the wire and updates the sequence accordingly.
+     *
+     * @param wire The {@link Wire} object used to navigate the queue.
+     * @return The last sequence number, or {@code -1} if it cannot be determined.
+     */
     public long moveToEnd(final Wire wire) {
         Sequence sequence1 = this.sequence;
         if (sequence1 != null) {
@@ -783,6 +1045,7 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
 
                 bytes.readPosition(endAddress);
 
+                // Iterate through the wire to find the last complete entry.
                 for (; ; ) {
                     int header = bytes.readVolatileInt(endAddress);
                     if (header == 0 || Wires.isNotComplete(header))
@@ -803,38 +1066,76 @@ class SCQIndexing extends AbstractCloseable implements Indexing, Demarshallable,
         return -1;
     }
 
+    /**
+     * Returns the count of linear scans performed during indexing.
+     *
+     * @return The count of linear scans.
+     */
     @Override
     public int linearScanCount() {
         return linearScanCount;
     }
 
+    /**
+     * Returns the count of linear scans by position performed during indexing.
+     *
+     * @return The count of linear scans by position.
+     */
     @Override
     public int linearScanByPositionCount() {
         return linearScanByPositionCount;
     }
 
+    /**
+     * Enumeration of fields used in the indexing structure.
+     * This defines the keys used for reading and writing index-related data in the wire.
+     */
     enum IndexingFields implements WireKey {
         indexCount, indexSpacing, index2Index,
         lastIndex // NOTE: the nextEntryToBeIndexed
     }
 
+    /**
+     * Holder class for {@link LongArrayValues} that caches the address and provides efficient access.
+     * This class is used to cache the address of an array and its values for quick lookups in the indexing structure.
+     */
     static class LongArrayValuesHolder {
         private final LongArrayValues values;
         private long address;
 
+        /**
+         * Constructs a holder for the provided {@link LongArrayValues}.
+         *
+         * @param values The {@link LongArrayValues} to hold.
+         */
         LongArrayValuesHolder(LongArrayValues values) {
             this.values = values;
             address = Long.MIN_VALUE;
         }
 
+        /**
+         * Gets the current address of the held values.
+         *
+         * @return The address.
+         */
         public long address() {
             return address;
         }
 
+        /**
+         * Sets a new address for the held values.
+         *
+         * @param address The new address.
+         */
         public void address(long address) {
             this.address = address;
         }
 
+        /**
+         * Returns the {@link LongArrayValues} held by this holder.
+         *
+         * @return The {@link LongArrayValues}.
+         */
         public LongArrayValues values() {
             return values;
         }

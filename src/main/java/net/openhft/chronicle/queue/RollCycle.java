@@ -18,6 +18,13 @@ package net.openhft.chronicle.queue;
 import net.openhft.chronicle.core.time.TimeProvider;
 import org.jetbrains.annotations.NotNull;
 
+/**
+ * Interface defining the behavior of a roll cycle in Chronicle Queue. A roll cycle dictates how frequently data rolls over
+ * to a new file and manages the indexing of records within those cycles.
+ * <p>
+ * Roll cycles are defined by a period of time, such as MINUTELY or DAILY, and they provide methods for managing the
+ * cycle duration, formatting, and indexing.
+ */
 public interface RollCycle {
 
     /**
@@ -124,6 +131,8 @@ public interface RollCycle {
     int toCycle(long index);
 
     /**
+     * Returns the maximum number of messages that can be stored in a single cycle.
+     *
      * @return the maximum number of messages per cycle
      */
     long maxMessagesPerCycle();

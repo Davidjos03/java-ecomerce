@@ -25,7 +25,8 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Utility methods for handling Files in connection with ChronicleQueue.
+ * Utility methods for handling files in connection with ChronicleQueue.
+ * <p>Provides functions for identifying removable files, checking open file states, and determining file suffixes.
  *
  * @author Per Minborg
  * @since 5.17.34

@@ -32,6 +32,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * The InternalPingPongMain class demonstrates a ping-pong benchmark using Chronicle Queue.
+ * It writes messages to the queue and reads them back in another thread, recording the latencies
+ * for both operations. The benchmark runs for a defined duration, and results are printed at the end.
+ */
 public final class InternalPingPongMain {
     //    static int throughput = Integer.getInteger("throughput", 250); // MB/s
     static int runtime = Integer.getInteger("runtime", 30); // seconds
@@ -45,6 +50,11 @@ public final class InternalPingPongMain {
         System.setProperty("jvm.safepoint.enabled", "true");
     }
 
+    /**
+     * Main method to run the ping-pong benchmark.
+     *
+     * @param args Command-line arguments (not used in this benchmark)
+     */
     public static void main(String[] args) {
         System.out.println(
 //                "-Dthroughput=" + throughput
@@ -55,6 +65,12 @@ public final class InternalPingPongMain {
         pingPong(64);
     }
 
+    /**
+     * Executes the ping-pong benchmark, where one thread writes to a Chronicle Queue
+     * and another thread reads from it, measuring the time between writes and reads.
+     *
+     * @param size The size of the message to write in bytes
+     */
     static void pingPong(int size) {
         String path = InternalPingPongMain.basePath + "/test-q-" + Time.uniqueId();
         Histogram readDelay = new Histogram();
@@ -113,6 +129,12 @@ public final class InternalPingPongMain {
         IOTools.deleteDirWithFiles(path, 2);
     }
 
+    /**
+     * Creates a Chronicle Queue at the given path.
+     *
+     * @param path The path where the queue will be created
+     * @return The created ChronicleQueue instance
+     */
     @NotNull
     private static ChronicleQueue createQueue(String path) {
         return ChronicleQueue.single(path);

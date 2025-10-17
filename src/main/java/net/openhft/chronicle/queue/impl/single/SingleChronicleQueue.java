@@ -64,6 +64,14 @@ import static net.openhft.chronicle.queue.TailerDirection.NONE;
 import static net.openhft.chronicle.wire.Wires.SPB_HEADER_SIZE;
 import static net.openhft.chronicle.wire.Wires.acquireBytesScoped;
 
+/**
+ * SingleChronicleQueue is an implementation of RollingChronicleQueue that supports appending
+ * and reading of data from a file-based queue with roll cycles. This class is responsible
+ * for managing the lifecycle, rolling logic, and the underlying storage.
+ *
+ * It also supports various configurations such as event loop handling, wire types, buffer
+ * management, and replication.
+ */
 @SuppressWarnings("this-escape")
 public class SingleChronicleQueue extends AbstractCloseable implements RollingChronicleQueue {
 
@@ -140,6 +148,14 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
     private final long[] chunkCount = {0};
     private final SyncMode syncMode;
 
+
+    /**
+     * Constructs a SingleChronicleQueue with the specified builder configuration.
+     * This constructor sets up various configurations like rolling cycle, epoch,
+     * buffering, path, wire type, and other queue-related settings based on the builder.
+     *
+     * @param builder the SingleChronicleQueueBuilder containing the configuration
+     */
     protected SingleChronicleQueue(@NotNull final SingleChronicleQueueBuilder builder) {
         try {
             rollCycle = builder.rollCycle();
@@ -231,13 +247,20 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
 
             AnalyticsHolder.instance().sendEvent("started", additionalEventParameters);
 
-            singleThreadedCheckDisabled(true);////
+            singleThreadedCheckDisabled(true);
         } catch (Throwable t) {
             close();
             throw Jvm.rethrow(t);
         }
     }
 
+    /**
+     * Calculates the overlap size based on the block size.
+     * Ensures that the overlap size is capped at 1GB (1L << 30).
+     *
+     * @param blockSize the block size for the queue
+     * @return the calculated overlap size
+     */
     private static long calcOverlapSize(long blockSize) {
         final long overlapSize;
         if (blockSize < OS.SAFE_PAGE_SIZE)
@@ -247,23 +270,46 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         else if (blockSize < 4L << 30)
             overlapSize = blockSize / 4;
         else
-            overlapSize = 1L << 30;
+            overlapSize = 1L << 30; // Maximum overlap size is 1GB
         return overlapSize;
     }
 
+    /**
+     * Sets a custom condition to be used for appender creation.
+     *
+     * @param createAppenderCondition the condition to be used for appender creation
+     */
     protected void createAppenderCondition(@NotNull Condition createAppenderCondition) {
         this.createAppenderCondition = createAppenderCondition;
     }
 
+    /**
+     * Returns the default cycle calculator. The cycle calculator is responsible
+     * for determining the rolling intervals and cycles based on the time zone.
+     *
+     * @param zoneId the ZoneId used for cycle calculation
+     * @return the CycleCalculator instance
+     */
     protected CycleCalculator cycleCalculator(ZoneId zoneId) {
         return DefaultCycleCalculator.INSTANCE;
     }
 
+    /**
+     * Converts a text string into a file using the queue's path and suffix.
+     *
+     * @param builder the SingleChronicleQueueBuilder containing the path configuration
+     * @return a Function that converts text to a File
+     */
     @NotNull
     private Function<String, File> textToFile(@NotNull SingleChronicleQueueBuilder builder) {
         return name -> new File(builder.path(), name + SUFFIX);
     }
 
+    /**
+     * Converts a File object into a text string, stripping the queue file suffix.
+     *
+     * @return a Function that converts a File to its name as a String
+     */
     @NotNull
     private Function<File, String> fileToText() {
         return file -> {
@@ -272,25 +318,42 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         };
     }
 
+    /**
+     * Returns the source ID of this queue.
+     *
+     * @return the source ID as an integer
+     */
     @Override
     public int sourceId() {
         return sourceId;
     }
 
     /**
-     * when using replication to another host, this is the highest last index that has been confirmed to have been read by all of the remote host(s).
+     * Returns the highest last index that has been confirmed to be read by all remote hosts during replication.
+     * If replication is not enabled, returns -1.
+     *
+     * @return the last acknowledged replicated index or -1 if not available
      */
     @Override
     public long lastAcknowledgedIndexReplicated() {
         return lastAcknowledgedIndexReplicated == null ? -1 : lastAcknowledgedIndexReplicated.getVolatileValue(-1);
     }
 
+    /**
+     * Updates the last acknowledged index that has been replicated to all remote hosts.
+     *
+     * @param newValue the new last acknowledged index value
+     */
     @Override
     public void lastAcknowledgedIndexReplicated(long newValue) {
         if (lastAcknowledgedIndexReplicated != null)
             lastAcknowledgedIndexReplicated.setMaxValue(newValue);
     }
 
+    /**
+     * Refreshes the directory listing, ensuring it is up-to-date.
+     * Throws an exception if the queue has been closed.
+     */
     @Override
     public void refreshDirectoryListing() {
         throwExceptionIfClosed();
@@ -299,47 +362,85 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
     }
 
     /**
-     * when using replication to another host, this is the maximum last index that has been sent to any of the remote host(s).
+     * Returns the maximum last index that has been sent to any remote host during replication.
+     * If replication is not enabled, returns -1.
+     *
+     * @return the last replicated index or -1 if not available
      */
     @Override
     public long lastIndexReplicated() {
         return lastIndexReplicated == null ? -1 : lastIndexReplicated.getVolatileValue(-1);
     }
 
+    /**
+     * Updates the last index that has been replicated to remote hosts.
+     *
+     * @param indexReplicated the new last replicated index value
+     */
     @Override
     public void lastIndexReplicated(long indexReplicated) {
         if (lastIndexReplicated != null)
             lastIndexReplicated.setMaxValue(indexReplicated);
     }
 
+    /**
+     * Returns the last index that has been synchronized in milliseconds.
+     * If synchronization is not enabled, returns -1.
+     *
+     * @return the last synchronized index in milliseconds, or -1 if not available
+     */
     @Override
     public long lastIndexMSynced() {
         return lastIndexMSynced == null ? -1 : lastIndexMSynced.getVolatileValue(-1);
     }
 
+    /**
+     * Updates the last index that has been synchronized in milliseconds.
+     *
+     * @param lastIndexMSynced the new last synchronized index in milliseconds
+     */
     @Override
     public void lastIndexMSynced(long lastIndexMSynced) {
         if (this.lastIndexMSynced != null)
             this.lastIndexMSynced.setMaxValue(lastIndexMSynced);
     }
 
+    /**
+     * Unsupported operation. Currently, clear is not implemented.
+     */
     @Override
     public void clear() {
         throw new UnsupportedOperationException("Not yet implemented");
     }
 
+    /**
+     * Returns the file representing the queue's directory path.
+     *
+     * @return the File object for the queue's directory
+     */
     @Override
     @NotNull
     public File file() {
         return path;
     }
 
+    /**
+     * Returns the absolute path of the queue's directory as a string.
+     *
+     * @return the absolute path of the queue directory
+     */
     @NotNull
     @Override
     public String fileAbsolutePath() {
         return fileAbsolutePath;
     }
 
+    /**
+     * Dumps the last header of the last cycle of the queue. This provides debugging
+     * information about the state of the last cycle's header.
+     *
+     * @return a string representation of the last cycle's header
+     */
     @Override
     public @NotNull String dumpLastHeader() {
         StringBuilder sb = new StringBuilder(256);
@@ -349,6 +450,12 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return sb.toString();
     }
 
+    /**
+     * Dumps the contents of the entire queue, including metadata and each cycle.
+     * This provides a full debugging view of the queue's state.
+     *
+     * @return a string representation of the queue's metadata and cycles
+     */
     @NotNull
     @Override
     public String dump() {
@@ -363,6 +470,14 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return sb.toString();
     }
 
+    /**
+     * Dumps the contents of the queue from a given index range into a Writer.
+     * If there are no more messages in the queue or the target index is beyond the range, it terminates the dump.
+     *
+     * @param writer   the Writer to output the queue contents to
+     * @param fromIndex the starting index from where to dump
+     * @param toIndex   the ending index where the dump should stop
+     */
     @Override
     public void dump(@NotNull Writer writer, long fromIndex, long toIndex) {
         try {
@@ -379,6 +494,8 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
                 try (ScopedResource<Bytes<Void>> stlBytes = acquireBytesScoped()) {
                     Bytes<?> bytes = stlBytes.get();
                     TextWire text = new TextWire(bytes);
+
+                    // Iterate through documents and dump their contents
                     while (true) {
                         try (DocumentContext dc = tailer.readingDocument()) {
                             if (!dc.isPresent()) {
@@ -415,53 +532,91 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
     }
 
-    // Used in testing.
+    /**
+     * Returns the chunk count. Used in testing.
+     *
+     * @return the chunk count
+     */
     public long chunkCount() {
         return chunkCount[0];
     }
 
+    /**
+     * Returns the number of index entries.
+     *
+     * @return the index count
+     */
     @Override
     public int indexCount() {
         return indexCount;
     }
 
+    /**
+     * Returns the spacing between index entries.
+     *
+     * @return the index spacing
+     */
     @Override
     public int indexSpacing() {
         return indexSpacing;
     }
 
+    /**
+     * Returns the epoch time used for roll cycles.
+     *
+     * @return the epoch time
+     */
     @Override
     public long epoch() {
         return epoch;
     }
 
+    /**
+     * Returns the roll cycle used by the queue.
+     *
+     * @return the roll cycle
+     */
     @Override
     @NotNull
     public RollCycle rollCycle() {
         return this.rollCycle;
     }
 
-    @SuppressWarnings("deprecation")
+    /**
+     * Returns the interval for delta checkpointing.
+     *
+     * @return the delta checkpoint interval
+     */
     @Override
     public int deltaCheckpointInterval() {
         return 64;
     }
 
     /**
-     * @return if we uses async mode to buffer the appends, the Excerpts are written to the Chronicle Queue using a background thread
+     * Indicates whether the queue uses asynchronous buffering for appending.
+     * In asynchronous mode, appends are handled by a background thread.
+     *
+     * @return true if the queue uses asynchronous buffering, false otherwise
      */
     public boolean buffered() {
         return this.isBuffered;
     }
 
+    /**
+     * Returns the event loop used by the queue.
+     *
+     * @return the event loop
+     */
     @NotNull
     public EventLoop eventLoop() {
         return this.eventLoop;
     }
 
     /**
-     * Construct a new {@link ExcerptAppender} once the {@link #createAppenderCondition} is met.
-     * @return The new appender
+     * Constructs a new {@link ExcerptAppender} once the {@link #createAppenderCondition} is met.
+     *
+     * @return the new ExcerptAppender
+     * @throws InterruptedRuntimeException if the thread is interrupted while waiting for the condition
      */
     @NotNull
     protected ExcerptAppender createNewAppenderOnceConditionIsMet() {
@@ -480,7 +635,7 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
      * This is protected so sub-classes can override the creation of an appender,
      * to create a new appender, sub-classes should call {@link #createNewAppenderOnceConditionIsMet()}
      *
-     * @return The new appender
+     * @return the new ExcerptAppender
      */
     @NotNull
     protected ExcerptAppender constructAppender() {
@@ -488,6 +643,11 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return new StoreAppender(this, newPool, checkInterrupts);
     }
 
+    /**
+     * Returns the StoreFileListener used by the queue.
+     *
+     * @return the StoreFileListener
+     */
     protected StoreFileListener storeFileListener() {
         return storeFileListener;
     }
@@ -497,6 +657,26 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return storeSupplier;
     }
 
+    /**
+     * Acquires an {@link ExcerptAppender} from a thread-local pool of appenders.
+     * If the queue is in read-only mode, an IllegalStateException is thrown.
+     *
+     * @return the ExcerptAppender
+     */
+    @SuppressWarnings("deprecation")
+    @NotNull
+    public ExcerptAppender acquireAppender() {
+        return ThreadLocalAppender.acquireThreadLocalAppender(this);
+    }
+
+    /**
+     * Acquires a thread-local ExcerptAppender for the given queue.
+     * If the queue is in read-only mode, an IllegalStateException is thrown.
+     *
+     * @param queue the SingleChronicleQueue for which the appender is acquired
+     * @return the ExcerptAppender
+     * @throws IllegalStateException if the queue is in read-only mode
+     */
     @NotNull
     ExcerptAppender acquireThreadLocalAppender(@NotNull SingleChronicleQueue queue) {
         queue.throwExceptionIfClosed();
@@ -511,6 +691,13 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return res;
     }
 
+    /**
+     * Creates a new {@link ExcerptAppender}. If the queue is in read-only mode,
+     * an {@link IllegalStateException} is thrown.
+     *
+     * @return a new ExcerptAppender
+     * @throws IllegalStateException if the queue is read-only
+     */
     @NotNull
     @Override
     public ExcerptAppender createAppender() {
@@ -543,6 +730,15 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return appendLock;
     }
 
+    /**
+     * Creates an {@link ExcerptTailer} with a specific ID. The tailer will use the
+     * provided ID to track its position, and the preconditions for creating a tailer
+     * are verified before initialization.
+     *
+     * @param id the identifier for the tailer
+     * @return a new ExcerptTailer
+     * @throws NamedTailerNotAvailableException if the tailer is not available due to replication locks
+     */
     @NotNull
     @Override
     public ExcerptTailer createTailer(String id) {
@@ -558,6 +754,13 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return storeTailer;
     }
 
+    /**
+     * Verifies the preconditions before creating a tailer. Ensures the queue is not
+     * closed and handles specific cases for replicated named tailers.
+     *
+     * @param id the identifier for the tailer, may be null for non-named tailers
+     * @throws NamedTailerNotAvailableException if a named tailer is not available
+     */
     private void verifyTailerPreconditions(String id) {
         // Preconditions for all tailer types
         throwExceptionIfClosed();
@@ -569,17 +772,36 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
     }
 
+    /**
+     * Acquires a LongValue object for a given ID from the metadata store.
+     * This is typically used to track indexes for specific IDs.
+     *
+     * @param id the identifier for which to acquire the index
+     * @return a LongValue representing the index for the given ID
+     */
     @Override
     @NotNull
     public LongValue indexForId(@NotNull String id) {
         return this.metaStore.doWithExclusiveLock((ts) -> ts.acquireValueFor("index." + id, 0L));
     }
 
+    /**
+     * Acquires the version index for a given ID from the metadata store.
+     *
+     * @param id the identifier for which to acquire the version index
+     * @return a LongValue representing the version index for the given ID
+     */
     @NotNull
     public LongValue indexVersionForId(@NotNull String id) {
         return this.metaStore.doWithExclusiveLock((ts) -> ts.acquireValueFor(String.format(INDEX_VERSION_FORMAT, id), -1L));
     }
 
+    /**
+     * Creates a write lock specifically for versioned indexes identified by the given ID.
+     *
+     * @param id the identifier for which to create the write lock
+     * @return a new TableStoreWriteLock for the version index
+     */
     @NotNull
     public TableStoreWriteLock versionIndexLockForId(@NotNull String id) {
         return new TableStoreWriteLock(
@@ -590,6 +812,12 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         );
     }
 
+    /**
+     * Creates a default {@link ExcerptTailer} for the queue. If the queue is closed,
+     * an exception is thrown.
+     *
+     * @return a new ExcerptTailer
+     */
     @NotNull
     @Override
     public ExcerptTailer createTailer() {
@@ -598,6 +826,17 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return createTailer(null);
     }
 
+    /**
+     * Retrieves or creates a {@link SingleChronicleQueueStore} for a specific cycle.
+     * The store is acquired from the pool, and if createIfAbsent is true, a new store
+     * is created if it doesn't already exist.
+     *
+     * @param cycle the cycle for which to acquire the store
+     * @param epoch the epoch time
+     * @param createIfAbsent whether to create a store if it doesn't exist
+     * @param oldStore the previous store, if available
+     * @return the acquired or created SingleChronicleQueueStore, or null if unavailable
+     */
     @Nullable
     @Override
     public final SingleChronicleQueueStore storeForCycle(int cycle, final long epoch, boolean createIfAbsent, SingleChronicleQueueStore oldStore) {
@@ -606,6 +845,14 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
                 oldStore);
     }
 
+    /**
+     * Returns the next cycle in the specified direction.
+     *
+     * @param cycle the current cycle
+     * @param direction the direction (forward or backward) in which to find the next cycle
+     * @return the next cycle
+     * @throws ParseException if there is an error parsing cycle data
+     */
     @Override
     public int nextCycle(int cycle, @NotNull TailerDirection direction) throws ParseException {
         throwExceptionIfClosed();
@@ -681,13 +928,15 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
                 // is 1 except rather than zero
                 long l = tailer.excerptsInCycle(lowerCycle);
                 result += (l - lowerSeqNum);
-            } else
+            } else {
                 throw new IllegalStateException("Cycle not found, lower-cycle=" + Long.toHexString(lowerCycle));
+            }
 
             if (cycles.last() == upperCycle) {
                 result += upperSeqNum;
-            } else
+            } else {
                 throw new IllegalStateException("Cycle not found,  upper-cycle=" + Long.toHexString(upperCycle));
+            }
 
             if (cycles.size() == 2)
                 return result;
@@ -702,12 +951,24 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
     }
 
+    /**
+     * Lists the cycles between the specified lower and upper cycle values.
+     *
+     * @param lowerCycle the starting cycle
+     * @param upperCycle the ending cycle
+     * @return a NavigableSet of Long values representing the cycles between the lower and upper cycle
+     */
     public NavigableSet<Long> listCyclesBetween(int lowerCycle, int upperCycle) {
         throwExceptionIfClosed();
 
         return pool.listCyclesBetween(lowerCycle, upperCycle);
     }
 
+    /**
+     * Adds a {@link Closeable} listener that will be closed when this queue is closed.
+     *
+     * @param key the Closeable to add to the close listeners
+     */
     public <T> void addCloseListener(Closeable key) {
         synchronized (closers) {
             if (!closers.isEmpty())
@@ -716,6 +977,10 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
     }
 
+    /**
+     * Performs the closing operations for this queue. All resources are closed in a synchronized
+     * block, and special care is taken to close the event loop and other important components.
+     */
     @Override
     protected void performClose() {
         synchronized (closers) {
@@ -743,6 +1008,11 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             eventLoop.close();
     }
 
+    /**
+     * Ensures that resources are properly closed during finalization if they were not closed earlier.
+     *
+     * @throws Throwable if there is an error during finalization
+     */
     @SuppressWarnings({"deprecation", "removal"})
     @Override
     protected void finalize() throws Throwable {
@@ -750,20 +1020,41 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         warnAndCloseIfNotClosed();
     }
 
+    /**
+     * Closes the specified {@link SingleChronicleQueueStore}.
+     *
+     * @param store the store to close, may be null
+     */
     public final void closeStore(@Nullable SingleChronicleQueueStore store) {
         if (store != null)
             this.pool.closeStore(store);
     }
 
+    /**
+     * Returns the current cycle based on the roll cycle, time provider, and epoch.
+     *
+     * @return the current cycle
+     */
     @Override
     public final int cycle() {
         return cycleCalculator.currentCycle(rollCycle, time, epoch);
     }
 
+    /**
+     * Returns the current cycle using a specified time provider.
+     *
+     * @param timeProvider the TimeProvider to use for cycle calculation
+     * @return the current cycle
+     */
     public final int cycle(TimeProvider timeProvider) {
         return cycleCalculator.currentCycle(rollCycle, timeProvider, epoch);
     }
 
+    /**
+     * Returns the first index of the queue. If the first cycle is not available, returns Long.MAX_VALUE.
+     *
+     * @return the first index of the queue
+     */
     @Override
     public long firstIndex() {
         int cycle = firstCycle();
@@ -773,6 +1064,12 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return rollCycle().toIndex(cycle, 0);
     }
 
+    /**
+     * Returns the last index in the queue. This is a slow implementation that uses
+     * a {@link ExcerptTailer} to find the last non-metadata document.
+     *
+     * @return the last index in the queue, or -1 if no documents are found
+     */
     @Override
     public long lastIndex() {
         // This is a slow implementation that gets a Tailer/DocumentContext to find the last index
@@ -806,11 +1103,20 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
     }
 
+    /**
+     * Returns the list of files in the queue's directory.
+     *
+     * @return an array of file names in the directory, or null if an error occurs
+     */
     @Nullable
     String[] getList() {
         return path.list();
     }
 
+    /**
+     * Sets the first and last cycle values based on the current system time and the directory listing.
+     * The directory listing is refreshed if necessary, either periodically or forced based on the time.
+     */
     private void setFirstAndLastCycle() {
         long now = time.currentTimeMillis();
         if (now <= directoryListing.lastRefreshTimeMS()) {
@@ -821,6 +1127,12 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         directoryListing.refresh(force);
     }
 
+    /**
+     * Returns the first cycle available in the queue by setting the first and last cycle
+     * and then retrieving the minimum created cycle from the directory listing.
+     *
+     * @return the first cycle in the queue
+     */
     @Override
     public int firstCycle() {
         setFirstAndLastCycle();
@@ -836,39 +1148,74 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         directoryListing.onRoll(cycle);
     }
 
+    /**
+     * Returns the last cycle available in the queue by setting the first and last cycle
+     * and then retrieving the maximum created cycle from the directory listing.
+     *
+     * @return the last cycle in the queue
+     */
     @Override
     public int lastCycle() {
         setFirstAndLastCycle();
         return directoryListing.getMaxCreatedCycle();
     }
 
+    /**
+     * Returns the consumer that handles {@link BytesRingBufferStats}.
+     *
+     * @return the consumer for ring buffer statistics
+     */
     @NotNull
     public Consumer<BytesRingBufferStats> onRingBufferStats() {
         return this.onRingBufferStats;
     }
 
+    /**
+     * Returns the block size used by the queue.
+     *
+     * @return the block size
+     */
     public long blockSize() {
         return this.blockSize;
     }
 
-    // *************************************************************************
-    //
-    // *************************************************************************
-
+    /**
+     * Returns the overlap size for memory mapping.
+     *
+     * @return the overlap size
+     */
     public long overlapSize() {
         return this.overlapSize;
     }
 
+    /**
+     * Returns the {@link WireType} used by the queue.
+     *
+     * @return the WireType
+     */
     @NotNull
     @Override
     public WireType wireType() {
         return wireType;
     }
 
+    /**
+     * Returns the buffer capacity used by the queue.
+     *
+     * @return the buffer capacity
+     */
     public long bufferCapacity() {
         return this.bufferCapacity;
     }
 
+    /**
+     * Creates a {@link MappedFile} for the given file. The mapped file is created using the
+     * block size and overlap size for memory mapping. Sync mode is also set for the file.
+     *
+     * @param file the file to map
+     * @return the MappedFile instance
+     * @throws FileNotFoundException if the file cannot be found
+     */
     @NotNull
     @PackageLocal
     MappedFile mappedFile(File file) throws FileNotFoundException {
@@ -878,10 +1225,20 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         return mappedFile;
     }
 
+    /**
+     * Returns whether the queue is in read-only mode.
+     *
+     * @return true if the queue is read-only, false otherwise
+     */
     boolean isReadOnly() {
         return readOnly;
     }
 
+    /**
+     * Returns a string representation of the queue, showing the source ID and file path.
+     *
+     * @return a string representation of the queue
+     */
     @NotNull
     @Override
     public String toString() {
@@ -891,26 +1248,53 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
                 '}';
     }
 
+    /**
+     * Returns the {@link TimeProvider} used by the queue.
+     *
+     * @return the TimeProvider
+     */
     @NotNull
     public TimeProvider time() {
         return time;
     }
 
+    /**
+     * Creates a function that converts a file name into a cycle by parsing the name and removing the suffix.
+     *
+     * @return a function that converts a file name to a cycle
+     */
     @NotNull
     private ToIntFunction<String> fileNameToCycleFunction() {
         return name -> dateCache.parseCount(name.substring(0, name.length() - SUFFIX.length()));
     }
 
+    /**
+     * Removes the specified {@link StoreTailer} from the close listeners.
+     *
+     * @param storeTailer the StoreTailer to remove
+     */
     void removeCloseListener(final StoreTailer storeTailer) {
         synchronized (closers) {
             closers.remove(storeTailer);
         }
     }
 
+    /**
+     * Returns the metadata store used by the queue.
+     *
+     * @return the TableStore for metadata
+     */
     public TableStore<SCQMeta> metaStore() {
         return metaStore;
     }
 
+    /**
+     * Puts a new value in the table store for the given key and index. If the index is Long.MIN_VALUE,
+     * it sets the value as volatile, otherwise, it sets the max value.
+     *
+     * @param key   the key for the entry in the table store
+     * @param index the index value to set
+     */
     public void tableStorePut(CharSequence key, long index) {
         LongValue longValue = tableStoreAcquire(key, index);
         if (longValue == null) return;
@@ -920,6 +1304,14 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             longValue.setMaxValue(index);
     }
 
+    /**
+     * Acquires a {@link LongValue} from the table store for the given key, creating a new one
+     * if necessary. If the key does not exist, a new LongValue is created with the default value.
+     *
+     * @param key          the key for the entry
+     * @param defaultValue the default value to use if the key does not exist
+     * @return the acquired LongValue, or null if an error occurs
+     */
     @Nullable
     protected LongValue tableStoreAcquire(CharSequence key, long defaultValue) {
         try (final ScopedResource<Bytes<Void>> bytesTl = acquireBytesScoped()) {
@@ -942,12 +1334,27 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
     }
 
+    /**
+     * Gets the value for the given key from the table store. If the key does not exist,
+     * returns Long.MIN_VALUE.
+     *
+     * @param key the key for the entry in the table store
+     * @return the value associated with the key, or Long.MIN_VALUE if not found
+     */
     public long tableStoreGet(CharSequence key) {
         LongValue longValue = tableStoreAcquire(key, Long.MIN_VALUE);
         if (longValue == null) return Long.MIN_VALUE;
         return longValue.getVolatileValue();
     }
 
+    /**
+     * Converts a {@link CharSequence} key into a {@link BytesStore}. If the key is already
+     * a BytesStore, it is cast, otherwise the key is appended to a Bytes instance.
+     *
+     * @param key   the key to convert
+     * @param bytes the Bytes instance used for conversion
+     * @return the BytesStore representation of the key
+     */
     @SuppressWarnings("unchecked")
     private BytesStore<?,Void> asBytes(CharSequence key, Bytes<Void> bytes) {
         return key instanceof BytesStore
@@ -955,21 +1362,46 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
                 : bytes.append(key);
     }
 
+    /**
+     * A cached structure that stores cycle-related information, including the directory modification count
+     * and a map of cycle numbers to files.
+     */
     private static final class CachedCycleTree {
         private final long directoryModCount;
         private final NavigableMap<Long, File> cachedCycleTree;
 
+        /**
+         * Constructs a CachedCycleTree with the specified directory modification count and cached cycle tree.
+         *
+         * @param directoryModCount the modification count of the directory
+         * @param cachedCycleTree   the cached map of cycles to files
+         */
         CachedCycleTree(final long directoryModCount, final NavigableMap<Long, File> cachedCycleTree) {
             this.directoryModCount = directoryModCount;
             this.cachedCycleTree = cachedCycleTree;
         }
     }
 
+    /**
+     * StoreSupplier is responsible for supplying {@link SingleChronicleQueueStore} instances
+     * for specific cycles. It manages the mapping of files to memory and caches these mappings.
+     * This class also handles the creation and retrieval of stores for different cycles.
+     */
     class StoreSupplier extends AbstractCloseable implements WireStoreSupplier {
+
+        // A cached tree structure to store cycle-related data.
         private final AtomicReference<CachedCycleTree> cachedTree = new AtomicReference<>();
+
+        // A cache for managing MappedFile and MappedBytes, used to map files into memory.
         private final ReferenceCountedCache<File, MappedFile, MappedBytes, IOException> mappedFileCache;
+
+        // Indicates whether the queue path exists on disk.
         private boolean queuePathExists;
 
+        /**
+         * Constructor for StoreSupplier. It initializes the mapped file cache
+         * and disables single-threaded checks.
+         */
         private StoreSupplier() {
             mappedFileCache = new ReferenceCountedCache<>(
                     MappedBytes::mappedBytes,
@@ -977,6 +1409,16 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             singleThreadedCheckDisabled(true);
         }
 
+        /**
+         * Acquires a {@link SingleChronicleQueueStore} for the specified cycle.
+         * If the store doesn't exist and the strategy is {@link CreateStrategy.CREATE}, it will create a new store.
+         *
+         * @param cycle          the cycle to acquire the store for
+         * @param createStrategy the strategy for creating or reading the store
+         * @return the acquired SingleChronicleQueueStore or null if the store doesn't exist and the strategy is not CREATE
+         * @throws IOException in case of IO errors
+         * @throws TimeoutException if acquiring the store times out
+         */
         @Override
         public SingleChronicleQueueStore acquire(int cycle, CreateStrategy createStrategy) {
             throwExceptionIfClosed();
@@ -1069,8 +1511,6 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
                             if (line.contains(".cq4"))
                                 System.err.println(line);
                     }
-//                        System.err.println("wire.bytes.refCount="+wire.bytes().refCount());
-//                        System.err.println("wire.bytes.byteStore.refCount="+wire.bytes().bytesStore().refCount());
                     throw e;
                 }
                 return wireStore;
@@ -1081,6 +1521,14 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             }
         }
 
+        /**
+         * Reads the value of the wire store from the wire. Ensures the first message
+         * is the header, and throws an exception if the header is not present.
+         *
+         * @param wire the Wire to read from
+         * @return the ValueIn object containing the wire store value
+         * @throws StreamCorruptedException if the first message is not the header
+         */
         @NotNull
         private ValueIn readWireStoreValue(@NotNull Wire wire) throws StreamCorruptedException {
             try (ScopedResource<StringBuilder> stlSb = Wires.acquireStringBuilderScoped()) {
@@ -1093,7 +1541,13 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             }
         }
 
-        // Rename un-acquirable segment file to make sure no data is lost to try and recreate the segment
+        /**
+         * Renames an unacquirable cycle file to a backup file with a discard suffix, and attempts to recreate the segment.
+         *
+         * @param cycle     the cycle number
+         * @param cycleFile the file that couldn't be acquired
+         * @return the strategy to either create a new file or use it as read-only
+         */
         private CreateStrategy backupCycleFile(int cycle, File cycleFile) {
             File cycleFileDiscard = new File(cycleFile.getParentFile(),
                     String.format("%s-%d%s", cycleFile.getName(), System.currentTimeMillis(), DISCARD_FILE_SUFFIX));
@@ -1109,6 +1563,16 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             return success ? CreateStrategy.CREATE : CreateStrategy.READ_ONLY;
         }
 
+        /**
+         * This method initializes the index for the wire store and updates the header.
+         * It ensures that all data structures are properly prepared before publishing the initial header.
+         * It also notifies the directory listing of the new file creation.
+         *
+         * @param wire      the Wire object used for writing
+         * @param cycle     the cycle number for which the index is created
+         * @param wireStore the wire store for the current cycle
+         */
+        @SuppressWarnings("deprecation")
         private void createIndexThenUpdateHeader(Wire wire, int cycle, SingleChronicleQueueStore wireStore) {
             // Should very carefully prepare all data structures before publishing initial header
             wire.usePadding(wireStore.dataVersion() > 0);
@@ -1122,11 +1586,19 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             directoryListing.onFileCreated(path, cycle);
         }
 
+        /**
+         * Closes the StoreSupplier by releasing the mapped file cache resources.
+         */
         @Override
         protected void performClose() {
             mappedFileCache.close();
         }
 
+        /**
+         * Creates a new file at the specified path. If the parent directory does not exist, it is created.
+         *
+         * @param path the path of the file to create
+         */
         private void createFile(final File path) {
             try {
                 File dir = path.getParentFile();
@@ -1142,7 +1614,11 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
 
         /**
-         * @return cycleTree for the current directory / parentFile
+         * Returns a map of cycle files in the current directory. If necessary, it refreshes
+         * the directory listing and updates the cache.
+         *
+         * @param force whether to forcefully refresh the directory listing
+         * @return a NavigableMap of cycle numbers and their corresponding files
          */
         @NotNull
         private NavigableMap<Long, File> cycleTree(final boolean force) {
@@ -1184,6 +1660,14 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             return cachedValue.cachedCycleTree;
         }
 
+        /**
+         * Finds the next cycle in the given direction. If the current cycle is no longer
+         * present in the tree, it logs an error.
+         *
+         * @param currentCycle the current cycle
+         * @param direction    the direction to move (FORWARD or BACKWARD)
+         * @return the next cycle in the given direction
+         */
         @Override
         public int nextCycle(int currentCycle, @NotNull TailerDirection direction) {
             throwExceptionIfClosed();
@@ -1232,6 +1716,12 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             }
         }
 
+        /**
+         * Converts a map entry to a cycle number.
+         *
+         * @param entry the map entry
+         * @return the cycle number, or -1 if the entry is null
+         */
         private int toCycle(@Nullable Map.Entry<Long, File> entry) {
             if (entry == null || entry.getValue() == null)
                 return -1;
@@ -1239,7 +1729,7 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
         }
 
         /**
-         * the cycles between a range, inclusive
+         * Returns a set of cycles between the given lower and upper cycle numbers, inclusive.
          *
          * @param lowerCycle the lower cycle inclusive
          * @param upperCycle the upper cycle inclusive
@@ -1257,6 +1747,13 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             return tree.subMap(lowerKey, true, upperKey, true).navigableKeySet();
         }
 
+        /**
+         * Determines if a {@link SingleChronicleQueueStore} can be reused based on its cycle
+         * and the current directory listing.
+         *
+         * @param store the store to check
+         * @return true if the store can be reused, false otherwise
+         */
         @Override
         public boolean canBeReused(@NotNull SingleChronicleQueueStore store) {
             setFirstAndLastCycle();
@@ -1264,6 +1761,13 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
             return !store.isClosed() && cycle >= directoryListing.getMinCreatedCycle() && cycle <= directoryListing.getMaxCreatedCycle();
         }
 
+        /**
+         * Converts a cycle number to a key used in the cycle tree.
+         *
+         * @param cyle the cycle number
+         * @param m the label to use in case of an error
+         * @return the key for the cycle tree
+         */
         private Long toKey(int cyle, String m) {
             final File file = dateCache.resourceFor(cyle).path;
             if (!file.exists())

@@ -20,6 +20,11 @@ import net.openhft.chronicle.queue.util.FileUtil;
 
 import java.io.File;
 
+/**
+ * The InternalRemovableRollFileCandidatesMain class is responsible for finding removable
+ * roll file candidates in a specified directory and printing their absolute paths.
+ * If no directory is provided as an argument, the current directory is used by default.
+ */
 public final class InternalRemovableRollFileCandidatesMain {
     /**
      * Produces a list of removable roll file candidates and prints

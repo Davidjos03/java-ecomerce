@@ -22,8 +22,12 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * A MessageConsumer that only passes messages through that do or
- * do not match a list of patterns
+ * {@code PatternFilterMessageConsumer} is a {@link MessageConsumer} that filters messages based on a list of patterns.
+ * <p>
+ * It either passes messages that match all the patterns (or none, depending on configuration) to the next consumer
+ * in the chain, or filters them out if the pattern conditions are not met.
+ * <p>
+ * This class can be used for inclusion or exclusion filtering based on regular expressions.
  */
 public final class PatternFilterMessageConsumer implements MessageConsumer {
 
@@ -32,11 +36,12 @@ public final class PatternFilterMessageConsumer implements MessageConsumer {
     private final MessageConsumer nextMessageConsumer;
 
     /**
-     * Constructor
+     * Constructs a {@code PatternFilterMessageConsumer} with the specified patterns, matching condition,
+     * and next consumer.
      *
      * @param patterns            The list of patterns to match against
-     * @param shouldBePresent     true if we require all the patterns to match, false if we require none of the patterns to match
-     * @param nextMessageConsumer The next message consumer in line, messages that pass the filter will be passed to it
+     * @param shouldBePresent     If {@code true}, all patterns must match; if {@code false}, none of the patterns should match
+     * @param nextMessageConsumer The next message consumer in the chain that receives messages passing the filter
      */
     public PatternFilterMessageConsumer(List<Pattern> patterns, boolean shouldBePresent, MessageConsumer nextMessageConsumer) {
         this.patterns = patterns;
@@ -44,6 +49,14 @@ public final class PatternFilterMessageConsumer implements MessageConsumer {
         this.nextMessageConsumer = nextMessageConsumer;
     }
 
+    /**
+     * Consumes a message by checking it against the list of patterns. If the message matches (or doesn't match,
+     * depending on {@code shouldBePresent}), it is passed to the next consumer.
+     *
+     * @param index   The index of the message
+     * @param message The message content
+     * @return {@code true} if the message was consumed by the next consumer, {@code false} otherwise
+     */
     @Override
     public boolean consume(long index, String message) {
         for (Pattern pattern : patterns) {

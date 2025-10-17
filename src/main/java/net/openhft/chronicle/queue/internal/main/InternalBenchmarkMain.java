@@ -33,6 +33,16 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.locks.LockSupport;
 
+/**
+ * Internal benchmark utility for testing Chronicle Queue throughput.
+ * <p>
+ * The benchmark can be configured via system properties:
+ * <ul>
+ *     <li>{@code throughput} - the target throughput in MB/s (default 250)</li>
+ *     <li>{@code runtime} - the benchmark runtime in seconds (default 300)</li>
+ *     <li>{@code path} - the base path for Chronicle Queue (default OS temp directory)</li>
+ * </ul>
+ */
 public class InternalBenchmarkMain {
     static volatile boolean running = true;
     static int throughput = Integer.getInteger("throughput", 250); // MB/s
@@ -46,6 +56,12 @@ public class InternalBenchmarkMain {
         System.setProperty("jvm.safepoint.enabled", "true");
     }
 
+    /**
+     * The main method executes the benchmark. The throughput, runtime, and base path can be
+     * configured using system properties.
+     *
+     * @param args Command-line arguments (not used)
+     */
     public static void main(String[] args) {
         System.out.println(
                 "-Dthroughput=" + throughput
@@ -60,6 +76,13 @@ public class InternalBenchmarkMain {
         }
     }
 
+    /**
+     * Runs the benchmark for a specified message size.
+     * Measures write, transport, and read latencies, and controls the
+     * flow of writing and reading through ChronicleQueue.
+     *
+     * @param messageSize the size of each message in bytes
+     */
     static void benchmark(int messageSize) {
         Histogram writeTime = new Histogram(32, 7);
         Histogram transportTime = new Histogram(32, 7);
@@ -158,6 +181,13 @@ public class InternalBenchmarkMain {
         Jvm.pause(1000);
     }
 
+    /**
+     * Processes a single document from the queue using the provided tailer and samples transport and read times.
+     *
+     * @param transportTime The histogram for measuring transport times
+     * @param readTime      The histogram for measuring read times
+     * @param tailer        The ExcerptTailer used to read from the queue
+     */
     private static void runInner(Histogram transportTime, Histogram readTime, ExcerptTailer tailer) {
         Jvm.safepoint();
         /*if (tailer.peekDocument()) {
@@ -188,6 +218,12 @@ public class InternalBenchmarkMain {
         Jvm.safepoint();
     }
 
+    /**
+     * Creates a new ChronicleQueue with the given path.
+     *
+     * @param path The path for the Chronicle Queue
+     * @return A new ChronicleQueue instance
+     */
     @NotNull
     private static ChronicleQueue createQueue(String path) {
         return ChronicleQueue.singleBuilder(path)
@@ -196,6 +232,12 @@ public class InternalBenchmarkMain {
                 .build();
     }
 
+    /**
+     * Reads a message from the provided bytes and returns the start time of the message.
+     *
+     * @param bytes The bytes containing the message
+     * @return The start time of the message
+     */
     private static long readMessage(Bytes<?> bytes) {
         Jvm.safepoint();
         long start = bytes.readLong();
@@ -210,6 +252,12 @@ public class InternalBenchmarkMain {
         return start;
     }
 
+    /**
+     * Writes a message of the specified size to the given wire.
+     *
+     * @param wire        The wire to write to
+     * @param messageSize The size of the message to write
+     */
     private static void writeMessage(Wire wire, int messageSize) {
         Bytes<?> bytes = wire.bytes();
         long wp = bytes.writePosition();

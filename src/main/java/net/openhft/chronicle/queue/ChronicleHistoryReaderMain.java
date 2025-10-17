@@ -17,6 +17,7 @@
 package net.openhft.chronicle.queue;
 
 import net.openhft.chronicle.queue.reader.ChronicleHistoryReader;
+import net.openhft.chronicle.wire.MessageHistory;
 import org.apache.commons.cli.*;
 import org.jetbrains.annotations.NotNull;
 
@@ -25,20 +26,33 @@ import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Reads @see MessageHistory from a chronicle and outputs histograms for
+ * The main class for reading {@link MessageHistory} from a Chronicle queue
+ * and generating histograms for:
  * <ul>
- * <li>latencies for each component that has processed a message</li>
- * <li>latencies between each component that has processed a message</li>
+ *     <li>Latencies for each component that has processed a message</li>
+ *     <li>Latencies between each component that has processed a message</li>
  * </ul>
- *
- * @author Jerry Shea
+ * This class provides options to configure the reader via command line arguments and outputs the results
+ * to the console.
  */
 public class ChronicleHistoryReaderMain {
 
+    /**
+     * Entry point of the application.
+     * Initializes the {@link ChronicleHistoryReaderMain} and passes command-line arguments.
+     *
+     * @param args Command-line arguments
+     */
     public static void main(@NotNull String[] args) {
         new ChronicleHistoryReaderMain().run(args);
     }
 
+    /**
+     * Runs the ChronicleHistoryReader setup and execution.
+     * Parses command-line options and configures the {@link ChronicleHistoryReader}.
+     *
+     * @param args Command-line arguments
+     */
     protected void run(String[] args) {
         final Options options = options();
         final CommandLine commandLine = parseCommandLine(args, options);
@@ -49,6 +63,12 @@ public class ChronicleHistoryReaderMain {
         }
     }
 
+    /**
+     * Configures the {@link ChronicleHistoryReader} based on the command-line options.
+     *
+     * @param commandLine Parsed command-line options
+     * @param chronicleHistoryReader The history reader to configure
+     */
     protected void setup(@NotNull final CommandLine commandLine, @NotNull final ChronicleHistoryReader chronicleHistoryReader) {
         chronicleHistoryReader.
                 withMessageSink(System.out::println).
@@ -65,11 +85,24 @@ public class ChronicleHistoryReaderMain {
             chronicleHistoryReader.withSummaryOutput(Integer.parseInt(commandLine.getOptionValue('u')));
     }
 
+    /**
+     * Initializes a new instance of {@link ChronicleHistoryReader}.
+     *
+     * @return A new {@link ChronicleHistoryReader} instance
+     */
     @NotNull
     protected ChronicleHistoryReader chronicleHistoryReader() {
         return new ChronicleHistoryReader();
     }
 
+    /**
+     * Parses command-line arguments using Apache Commons CLI.
+     * If help is requested, it prints the help message and exits.
+     *
+     * @param args    Command-line arguments
+     * @param options Available command-line options
+     * @return Parsed {@link CommandLine} object
+     */
     protected CommandLine parseCommandLine(@NotNull final String[] args, final Options options) {
         final CommandLineParser parser = new DefaultParser();
         CommandLine commandLine = null;
@@ -86,10 +119,23 @@ public class ChronicleHistoryReaderMain {
         return commandLine;
     }
 
+    /**
+     * Prints help and exits the program.
+     *
+     * @param options Command-line options
+     * @param status  Exit status
+     */
     protected void printHelpAndExit(final Options options, int status) {
         printHelpAndExit(options, status, null);
     }
 
+    /**
+     * Prints help and exits the program, optionally with a message.
+     *
+     * @param options Command-line options
+     * @param status  Exit status
+     * @param message Optional message to print before help
+     */
     protected void printHelpAndExit(final Options options, int status, String message) {
         final PrintWriter writer = new PrintWriter(System.out);
         new HelpFormatter().printHelp(
@@ -107,6 +153,11 @@ public class ChronicleHistoryReaderMain {
         System.exit(status);
     }
 
+    /**
+     * Configures command-line options for the ChronicleHistoryReaderMain.
+     *
+     * @return Configured {@link Options} object
+     */
     @NotNull
     protected Options options() {
         final Options options = new Options();

@@ -7,7 +7,9 @@ package net.openhft.chronicle.queue.rollcycles;
 import net.openhft.chronicle.queue.RollCycle;
 
 /**
- * These are used to minimise rolls but do create very large files, possibly too large.
+ * Enum representing large roll cycles, designed to minimize file rolls but resulting in very large files.
+ * <p>These roll cycles are typically used in scenarios where fewer rollovers are preferred, but the file sizes
+ * can grow quite large and may exceed typical limits.
  */
 public enum LargeRollCycles implements RollCycle {
     /**
@@ -32,12 +34,25 @@ public enum LargeRollCycles implements RollCycle {
     private final int lengthInMillis;
     private final RollCycleArithmetic arithmetic;
 
+    /**
+     * Constructs a LargeRollCycle with the given parameters.
+     *
+     * @param format          The format string used for rolling files
+     * @param lengthInMillis  The duration of each cycle in milliseconds
+     * @param indexCount      The number of index entries
+     * @param indexSpacing    The spacing between indexed entries
+     */
     LargeRollCycles(String format, int lengthInMillis, int indexCount, int indexSpacing) {
         this.format = format;
         this.lengthInMillis = lengthInMillis;
         this.arithmetic = RollCycleArithmetic.of(indexCount, indexSpacing);
     }
 
+    /**
+     * Returns the maximum number of messages allowed per cycle.
+     *
+     * @return The maximum number of messages allowed per cycle
+     */
     public long maxMessagesPerCycle() {
         return arithmetic.maxMessagesPerCycle();
     }
@@ -53,7 +68,10 @@ public enum LargeRollCycles implements RollCycle {
     }
 
     /**
-     * @return this is the size of each index array, note: indexCount^2 is the maximum number of index queue entries.
+     * Returns the default size of the index array.
+     * <p>Note: {@code indexCount^2} is the maximum number of index queue entries.
+     *
+     * @return The default index count
      */
     @Override
     public int defaultIndexCount() {

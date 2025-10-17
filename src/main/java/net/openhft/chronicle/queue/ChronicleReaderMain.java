@@ -32,14 +32,32 @@ import java.util.function.Consumer;
 import static java.util.Arrays.stream;
 
 /**
- * Display records in a Chronicle in a text form.
+ * Main class for reading and displaying records from a Chronicle Queue in text form.
+ * Provides several command-line options to control behavior such as including/excluding records
+ * based on regex, following a live queue, or displaying records in various formats.
  */
 public class ChronicleReaderMain {
 
+    /**
+     * Entry point of the application. Initializes the {@link ChronicleReaderMain} instance and
+     * passes command-line arguments for execution.
+     *
+     * @param args Command-line arguments
+     */
     public static void main(@NotNull String[] args) {
         new ChronicleReaderMain().run(args);
     }
 
+    /**
+     * Adds an option to the provided {@link Options} object for command-line parsing.
+     *
+     * @param options     The options object to add the option to
+     * @param opt         The short name of the option
+     * @param argName     The name of the argument
+     * @param hasArg      Whether the option takes an argument
+     * @param description Description of the option
+     * @param isRequired  Whether the option is required
+     */
     public static void addOption(final Options options,
                                  final String opt,
                                  final String argName,
@@ -52,6 +70,12 @@ public class ChronicleReaderMain {
         options.addOption(option);
     }
 
+    /**
+     * Runs the Chronicle Reader with the provided command-line arguments.
+     * Configures the {@link ChronicleReader} and executes the reader.
+     *
+     * @param args Command-line arguments
+     */
     protected void run(@NotNull String[] args) {
         final Options options = options();
         final CommandLine commandLine = parseCommandLine(args, options);
@@ -63,10 +87,23 @@ public class ChronicleReaderMain {
         chronicleReader.execute();
     }
 
+    /**
+     * Creates and returns a new instance of {@link ChronicleReader}.
+     *
+     * @return A new instance of {@link ChronicleReader}
+     */
     protected ChronicleReader chronicleReader() {
         return new ChronicleReader();
     }
 
+    /**
+     * Parses the command-line arguments using Apache Commons CLI.
+     * If the help option is provided, prints the help message and exits.
+     *
+     * @param args    Command-line arguments
+     * @param options Command-line options available
+     * @return The parsed {@link CommandLine} object
+     */
     protected CommandLine parseCommandLine(final @NotNull String[] args, final Options options) {
         final CommandLineParser parser = new DefaultParser();
         CommandLine commandLine = null;
@@ -83,10 +120,23 @@ public class ChronicleReaderMain {
         return commandLine;
     }
 
+    /**
+     * Prints help information and exits the application.
+     *
+     * @param options Command-line options
+     * @param status  Exit status code
+     */
     protected void printHelpAndExit(final Options options, int status) {
         printHelpAndExit(options, status, null);
     }
 
+    /**
+     * Prints help information along with an optional message and exits the application.
+     *
+     * @param options Command-line options
+     * @param status  Exit status code
+     * @param message Optional message to display before help
+     */
     protected void printHelpAndExit(final Options options, int status, String message) {
         final PrintWriter writer = new PrintWriter(System.out);
         new HelpFormatter().printHelp(
@@ -104,6 +154,13 @@ public class ChronicleReaderMain {
         System.exit(status);
     }
 
+    /**
+     * Configures the {@link ChronicleReader} based on the command-line options.
+     * Supports various options like regex filtering, tailing the queue, and more.
+     *
+     * @param chronicleReader The ChronicleReader instance to configure
+     * @param commandLine     Parsed command-line options
+     */
     protected void configureReader(final ChronicleReader chronicleReader, final CommandLine commandLine) {
         final Consumer<String> messageSink = commandLine.hasOption('l') ?
                 s -> System.out.println(s.replaceAll("\n", "")) :
@@ -176,6 +233,11 @@ public class ChronicleReaderMain {
         }
     }
 
+    /**
+     * Configures the available command-line options for the {@link ChronicleReaderMain}.
+     *
+     * @return A configured {@link Options} object with all available options
+     */
     @NotNull
     protected Options options() {
         final Options options = new Options();
