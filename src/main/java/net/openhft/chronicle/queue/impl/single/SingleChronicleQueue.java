@@ -583,16 +583,6 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
     }
 
     /**
-     * Returns the interval for delta checkpointing.
-     *
-     * @return the delta checkpoint interval
-     */
-    @Override
-    public int deltaCheckpointInterval() {
-        return 64;
-    }
-
-    /**
      * Indicates whether the queue uses asynchronous buffering for appending.
      * In asynchronous mode, appends are handled by a background thread.
      *
