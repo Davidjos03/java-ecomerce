@@ -27,7 +27,6 @@ import net.openhft.chronicle.queue.ExcerptTailer;
 import net.openhft.chronicle.queue.QueueTestCommon;
 import net.openhft.chronicle.queue.impl.single.SingleChronicleQueue;
 import net.openhft.chronicle.queue.impl.single.SingleChronicleQueueBuilder;
-import net.openhft.chronicle.queue.internal.util.InternalFileUtil;
 import net.openhft.chronicle.wire.WireType;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
@@ -193,7 +192,7 @@ public class FileUtilTest extends QueueTestCommon {
         assumeTrue(getAllOpenFilesIsSupportedOnOS());
 
         // open file for writing, keeping file handle open
-        File temporaryFile = IOTools.createTempFile("testOpenFilesWithPid.txt");
+        File temporaryFile = new File(OS.getTmp() , "testOpenFilesWithPid.txt-" + System.nanoTime());
         FileWriter fstream = new FileWriter(temporaryFile);
         BufferedWriter out = new BufferedWriter(fstream);
         out.write("somedata");
