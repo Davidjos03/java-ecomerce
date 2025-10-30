@@ -26,7 +26,6 @@ import net.openhft.chronicle.queue.impl.StoreFileListener;
 import net.openhft.chronicle.queue.impl.single.SingleChronicleQueue;
 import net.openhft.chronicle.queue.impl.single.SingleChronicleQueueBuilder;
 import net.openhft.chronicle.wire.DocumentContext;
-import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 

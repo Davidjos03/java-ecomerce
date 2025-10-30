@@ -25,7 +25,7 @@ import net.openhft.chronicle.queue.DirectoryUtils;
 import net.openhft.chronicle.queue.ExcerptTailer;
 import net.openhft.chronicle.queue.QueueTestCommon;
 import net.openhft.chronicle.testframework.FlakyTestRunner;
-import net.openhft.chronicle.wire.*;
+import net.openhft.chronicle.wire.MessageHistory;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -240,12 +240,10 @@ public class OrderManagerTest extends QueueTestCommon {
         } finally {
             try {
                 IOTools.shallowDeleteDirWithFiles(queuePath);
-
             } catch (Exception ignore) {
             }
 
             try {
-
                 IOTools.shallowDeleteDirWithFiles(queuePath2);
             } catch (Exception ignore) {
             }
