@@ -5,22 +5,30 @@ author: Niel Clifford, Julia Gustafsson
 :navtitle: Contended writes
 :source-highlighter: highlight.js
 
-Normally, all writes to the queue are serialized based on the write-lock acquisition. Each time `ExcerptAppender#writingDocument()` is called, the appender tries to acquire the write-lock on the queue. If not free, it waits until the write-lock is unlocked, and in turn locks the queue for itself. This may degrade the performance whenever there is significant contention.
+Normally, all writes to the queue are serialized based on the write-lock acquisition.
+Each time `ExcerptAppender#writingDocument()` is called, the appender tries to acquire the write-lock on the queue.
+If not free, it waits until the write-lock is unlocked, and in turn locks the queue for itself.
+This may degrade the performance whenever there is significant contention.
 
-To mitigate this issue, Chronicle queue supports _double-buffering_ which to avoid stopping appenders from making progress. Instead of waiting whenever the write-lock cannot be acquired, the appender returns immediately with a context pointing to a secondary buffer. This defers the lock acquisition until `context.close()` is called (normally with try-with-resources pattern it is at the end of the try block). Hence, users are allowed to go ahead with writing data, and then essentially perform a `memcpy` on the serialized data (thus reducing cost of serialization).
+To mitigate this issue, Chronicle queue supports _double-buffering_ which to avoid stopping appenders from making progress.
+Instead of waiting whenever the write-lock cannot be acquired, the appender returns immediately with a context pointing to a secondary buffer.
+This defers the lock acquisition until `context.close()` is called (normally with try-with-resources pattern it is at the end of the try block).
+Hence, users are allowed to go ahead with writing data, and then essentially perform a `memcpy` on the serialized data (thus reducing cost of serialization).
 
 Double-buffering is disabled by default, but can be enabled when building the queue:
 
-[source, java]
+[source,java]
 ----
 ChronicleQueue queue = ChronicleQueue.singleBuilder("queue")
     .doubleBuffer(true)
     .build()
 ----
 
-IMPORTANT: During a buffered write, `DocumentContext.index()` will throw an `IndexNotAvailableException`. This is because no index is assigned until the buffer is written back to the queue, which happens when the `DocumentContext` is closed.
+IMPORTANT: During a buffered write, `DocumentContext.index()` will throw an `IndexNotAvailableException`.
+This is because no index is assigned until the buffer is written back to the queue, which happens when the `DocumentContext` is closed.
 
 == General Advice on Double Buffering
+
 Double buffering is only useful if:
 
 * the majority of the objects being written to the queue are big enough
@@ -28,10 +36,13 @@ Double buffering is only useful if:
 * there is a heavy contention on writes (e.g. 2 or more threads writing a lot of data to the queue at a very high rate)
 
 == Benchmarks
+
 Below are benchmark results for various data sizes at the frequency of 10 KHz for a cumbersome message (see `net.openhft.chronicle.queue.bench.QueueContendedWritesJLBHBenchmark`).
 
 === 1 KB messages
+
 ==== Double-Buffer Disabled
+
 ----
 ------------------ SUMMARY (Concurrent) --------------------
 Percentile   run1         run2         run3      % Variation
@@ -51,6 +62,7 @@ Percentile   run1         run2         run3      % Variation
 ----
 
 ==== Double-Buffer Enabled
+
 ----
 ------------------ SUMMARY (Concurrent) --------------------
 Percentile   run1         run2         run3      % Variation
@@ -70,7 +82,9 @@ Percentile   run1         run2         run3      % Variation
 ----
 
 === 4 KB messages
+
 ==== Double-Buffer Disabled
+
 ----
 ------------------ SUMMARY (Concurrent) --------------------
 Percentile   run1         run2         run3      % Variation
@@ -90,6 +104,7 @@ Percentile   run1         run2         run3      % Variation
 ----
 
 ==== Double-Buffer Enabled
+
 ----
 ------------------ SUMMARY (Concurrent) --------------------
 Percentile   run1         run2         run3      % Variation
