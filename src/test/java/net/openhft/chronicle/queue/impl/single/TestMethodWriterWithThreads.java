@@ -7,6 +7,7 @@ import net.openhft.chronicle.bytes.MethodReader;
 import net.openhft.chronicle.core.Jvm;
 import net.openhft.chronicle.core.io.Closeable;
 import net.openhft.chronicle.queue.ChronicleQueue;
+import net.openhft.chronicle.queue.ExcerptAppender;
 import net.openhft.chronicle.queue.ExcerptTailer;
 import net.openhft.chronicle.queue.QueueTestCommon;
 import net.openhft.chronicle.queue.main.DumpMain;
@@ -80,8 +81,7 @@ public class TestMethodWriterWithThreads extends QueueTestCommon {
             IntStream.range(0, 1000)
                     .parallel()
                     .forEach(i -> {
-                        final ExcerptTailer tailer = q.createTailer();
-                        try {
+                        try (final ExcerptTailer tailer = q.createTailer()) {
                             creates();
                             amends();
                             final MethodReader methodReader = tailer.methodReader(newReader());
@@ -90,7 +90,7 @@ public class TestMethodWriterWithThreads extends QueueTestCommon {
                                     j++;
                         } finally {
                             // close appender acquired by creates above
-                            Closeable.closeQuietly(acquireThreadLocalAppender(q), tailer);
+                            Closeable.closeQuietly(acquireThreadLocalAppender(q));
                         }
                         if (fail.get())
                             fail();
