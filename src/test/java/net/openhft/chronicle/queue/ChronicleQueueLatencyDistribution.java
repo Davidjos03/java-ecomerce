@@ -101,7 +101,7 @@ public class ChronicleQueueLatencyDistribution extends QueueTestCommon {
         new ChronicleQueueLatencyDistribution().run(args);
     }
 
-    public void run(String[] args) throws Exception {
+    protected void run(String[] args) throws Exception {
         // use CQ dir in current directory, not tmp as that is often tmpfs
         final File tmpDir = new File(this.getClass().getSimpleName() + "_" + System.currentTimeMillis());
         tmpDir.deleteOnExit();

@@ -5,11 +5,11 @@ package net.openhft.chronicle.queue;
 
 import net.openhft.chronicle.core.Jvm;
 import net.openhft.chronicle.core.OS;
-import net.openhft.chronicle.core.internal.JvmExceptionTracker;
 import net.openhft.chronicle.core.io.AbstractCloseable;
 import net.openhft.chronicle.core.io.AbstractReferenceCounted;
 import net.openhft.chronicle.core.io.IOTools;
 import net.openhft.chronicle.core.onoes.ExceptionKey;
+import net.openhft.chronicle.core.onoes.LogLevel;
 import net.openhft.chronicle.core.threads.CleaningThread;
 import net.openhft.chronicle.core.threads.ThreadDump;
 import net.openhft.chronicle.core.time.SystemTimeProvider;
@@ -31,13 +31,16 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static net.openhft.chronicle.core.onoes.LogLevel.DEBUG;
+import static net.openhft.chronicle.core.onoes.LogLevel.PERF;
 import static org.junit.Assert.fail;
 
 public class QueueTestCommon {
+    private static final Set<LogLevel> IGNORED_LOG_LEVELS = EnumSet.of(DEBUG, PERF);
     private static final boolean TRACE_TEST_EXECUTION = Jvm.getBoolean("queue.traceTestExecution");
     private final List<File> tmpDirs = new ArrayList<>();
 
-    protected ThreadDump threadDump;
+    private ThreadDump threadDump;
     protected boolean finishedNormally;
     protected ExceptionTracker<ExceptionKey> exceptionTracker;
 
@@ -76,7 +79,7 @@ public class QueueTestCommon {
     // *************************************************************************
     //
     // *************************************************************************
-    static AtomicLong counter = new AtomicLong();
+    private static AtomicLong counter = new AtomicLong();
     private Set<String> targetAllowList;
     private long freeSpace;
 
@@ -142,14 +145,22 @@ public class QueueTestCommon {
         threadDump = new ThreadDump();
     }
 
-    public void checkThreadDump() {
+    private void checkThreadDump() {
         if (threadDump != null)
             threadDump.assertNoNewThreads();
     }
 
     @Before
     public void recordExceptions() {
-        exceptionTracker = JvmExceptionTracker.create(false);
+        Map<ExceptionKey, Integer> recordedExceptions = Jvm.recordExceptions(false);
+        exceptionTracker = ExceptionTracker.create(
+                ExceptionKey::message,
+                ExceptionKey::throwable,
+                Jvm::resetExceptionHandlers,
+                recordedExceptions,
+                key -> IGNORED_LOG_LEVELS.contains(key.level()),
+                key -> key.level() + " " + key.clazz().getSimpleName() + " " + key.message()
+        );
         if (OS.isWindows())
             ignoreException("Read-only mode is not supported on Windows® platforms, defaulting to read/write");
         for (String msg : Arrays.asList(
@@ -167,15 +178,15 @@ public class QueueTestCommon {
         }
     }
 
-    public void ignoreException(String message) {
+    protected void ignoreException(String message) {
         exceptionTracker.ignoreException(message);
     }
 
-    public void expectException(String message) {
+    protected void expectException(String message) {
         exceptionTracker.expectException(message);
     }
 
-    public void ignoreException(Predicate<ExceptionKey> predicate, String description) {
+    protected void ignoreException(Predicate<ExceptionKey> predicate, String description) {
         exceptionTracker.ignoreException(predicate, description);
     }
 
@@ -183,7 +194,7 @@ public class QueueTestCommon {
         exceptionTracker.expectException(predicate, description);
     }
 
-    public void checkExceptions() {
+    private void checkExceptions() {
         exceptionTracker.checkExceptions();
     }
 
