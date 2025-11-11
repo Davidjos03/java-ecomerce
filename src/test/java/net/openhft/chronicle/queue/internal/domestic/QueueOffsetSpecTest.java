@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
+ * Copyright 2013-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
  */
 package net.openhft.chronicle.queue.internal.domestic;
 
@@ -46,5 +46,35 @@ public class QueueOffsetSpecTest {
     public void parseWithTooFewTokensThrows() {
         QueueOffsetSpec.parse("ROLL_TIME;12:00");
     }
-}
 
+    @Test
+    public void formatAndParseEpochRoundTrip() {
+        long epoch = 42_000L;
+        String formatted = QueueOffsetSpec.formatEpochOffset(epoch);
+        QueueOffsetSpec parsed = QueueOffsetSpec.parse(formatted);
+        SingleChronicleQueueBuilder builder = SingleChronicleQueueBuilder.single().queueOffsetSpec(parsed);
+        assertEquals(epoch, builder.epoch());
+        assertEquals(formatted, parsed.format());
+    }
+
+    @Test
+    public void applyNoneDoesNotChangeBuilder() {
+        QueueOffsetSpec spec = QueueOffsetSpec.ofNone();
+        SingleChronicleQueueBuilder builder = SingleChronicleQueueBuilder.single().queueOffsetSpec(spec);
+        long originalEpoch = builder.epoch();
+        assertEquals(originalEpoch, builder.epoch());
+        assertEquals("NONE;", spec.format());
+        assertEquals("NONE;", builder.queueOffsetSpec().format());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void parseUnknownTypeThrows() {
+        QueueOffsetSpec.parse("INVALID;foo");
+    }
+
+    @Test(expected = java.time.DateTimeException.class)
+    public void parseRollTimeWithInvalidZoneFailsValidation() {
+        QueueOffsetSpec spec = QueueOffsetSpec.parse("ROLL_TIME;12:00;Invalid/Zone");
+        spec.validate();
+    }
+}

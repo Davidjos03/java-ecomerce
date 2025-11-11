@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
+ * Copyright 2013-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
  */
 package net.openhft.chronicle.queue.impl.single;
 
@@ -721,6 +721,18 @@ public class SingleChronicleQueueBuilder extends SelfDescribingMarshallable impl
      */
     public QueueOffsetSpec queueOffsetSpec() {
         return queueOffsetSpec == null ? QueueOffsetSpec.ofNone() : queueOffsetSpec;
+    }
+
+    /**
+     * Applies the supplied {@link QueueOffsetSpec} to this builder.
+     *
+     * @param spec the offset specification to apply
+     * @return this builder for chaining
+     */
+    public SingleChronicleQueueBuilder queueOffsetSpec(@NotNull QueueOffsetSpec spec) {
+        this.queueOffsetSpec = spec;
+        spec.apply(this);
+        return this;
     }
 
     /**

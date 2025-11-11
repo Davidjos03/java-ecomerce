@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
+ * Copyright 2013-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
  */
 package net.openhft.chronicle.queue.namedtailer;
 
@@ -144,6 +144,47 @@ public class NamedTailerVersioningTest extends QueueTestCommon {
             assertEquals(100, indexVersion.getValue());
             indexVersion.close();
 
+        } finally {
+            IOTools.deleteDirWithFiles(queuePath);
+        }
+    }
+
+    @Test
+    public void namedTailerCanRewindToStart() {
+        File queuePath = getTmpDir();
+        try (SingleChronicleQueue queue = SingleChronicleQueueBuilder.builder().path(queuePath).build();
+             ExcerptAppender appender = queue.createAppender();
+             ExcerptTailer tailer = queue.createTailer("replicated:rewind")) {
+
+            for (int i = 0; i < 3; i++) {
+                appender.writeText("msg-" + i);
+            }
+            assertEquals("msg-0", tailer.readText());
+            assertEquals("msg-1", tailer.readText());
+
+            tailer.toStart();
+            assertEquals("msg-0", tailer.readText());
+        } finally {
+            IOTools.deleteDirWithFiles(queuePath);
+        }
+    }
+
+    @Test
+    public void namedTailerCanMoveToStoredIndexAfterRestart() {
+        File queuePath = getTmpDir();
+        long[] indexes = new long[4];
+        try (SingleChronicleQueue queue = SingleChronicleQueueBuilder.builder().path(queuePath).build();
+             ExcerptAppender appender = queue.createAppender()) {
+            for (int i = 0; i < indexes.length; i++) {
+                appender.writeText("payload-" + i);
+                indexes[i] = appender.lastIndexAppended();
+            }
+        }
+
+        try (SingleChronicleQueue queue = SingleChronicleQueueBuilder.builder().path(queuePath).build();
+             ExcerptTailer tailer = queue.createTailer("replicated:resumer")) {
+            assertTrue("moveToIndex should succeed", tailer.moveToIndex(indexes[2]));
+            assertEquals("payload-2", tailer.readText());
         } finally {
             IOTools.deleteDirWithFiles(queuePath);
         }

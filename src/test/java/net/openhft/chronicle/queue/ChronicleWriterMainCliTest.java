@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
+ * Copyright 2013-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
  */
 package net.openhft.chronicle.queue;
 
@@ -39,6 +39,34 @@ public class ChronicleWriterMainCliTest extends QueueTestCommon {
             }
             try (DocumentContext dc = tailer.readingDocument()) {
                 assertFalse(dc.isPresent());
+            }
+        }
+    }
+
+    @Test
+    public void mainAcceptsMultipleFiles() throws Exception {
+        final Path queueDir = getTmpDir().toPath();
+        final Path payloadOne = Files.createTempFile(Paths.get(OS.getTarget()), "writer-cli", ".yaml");
+        final Path payloadTwo = Files.createTempFile(Paths.get(OS.getTarget()), "writer-cli", ".yaml");
+        Files.write(payloadOne, "!int 1\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(payloadTwo, "!int 2\n".getBytes(StandardCharsets.UTF_8));
+
+        ChronicleWriterMain.main(new String[]{
+                "-d", queueDir.toString(),
+                "-m", "value",
+                payloadOne.toString(),
+                payloadTwo.toString()
+        });
+
+        try (ChronicleQueue queue = SingleChronicleQueueBuilder.binary(queueDir).build()) {
+            final ExcerptTailer tailer = queue.createTailer();
+            try (DocumentContext dc = tailer.readingDocument()) {
+                assertTrue(dc.isPresent());
+                assertEquals(1, dc.wire().read("value").int32());
+            }
+            try (DocumentContext dc = tailer.readingDocument()) {
+                assertTrue(dc.isPresent());
+                assertEquals(2, dc.wire().read("value").int32());
             }
         }
     }

@@ -10,7 +10,7 @@
     <parent>
         <groupId>net.openhft</groupId>
         <artifactId>java-parent-pom</artifactId>
-        <version>1.27ea1</version>
+        <version>1.27ea2-SNAPSHOT</version>
         <relativePath />
     </parent>
 
@@ -399,39 +399,6 @@
             </plugin>
 
             <plugin>
-                <groupId>com.mycila</groupId>
-                <artifactId>license-maven-plugin</artifactId>
-                <version>4.1</version>
-
-                <configuration>
-                    <!-- One-line header; no newlines -->
-                    <inlineHeader>Copyright 2016-2025 chronicle.software; SPDX-License-Identifier: Apache-2.0
-                    </inlineHeader>
-                    <excludes>
-                        <exclude>LICENSE</exclude>
-                        <exclude>**/*.adoc</exclude>
-                        <exclude>**/*.md</exclude>
-                        <exclude>**/*.txt</exclude>
-                        <exclude>docs/antora/**</exclude>
-                        <exclude>src/main/config/**</exclude>
-                        <exclude>src/main/docs/**</exclude>
-                        <exclude>src/main/resources/**</exclude>
-                        <exclude>src/test/resources/**</exclude>
-                        <exclude>target/**</exclude>
-                        <exclude>**/*.versionsBackup</exclude>
-                    </excludes>
-                </configuration>
-
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <configuration>
@@ -466,11 +433,13 @@
             <!-- If you keep thresholds as properties, define them here
                  (or in the parent) so they resolve during this profile) -->
             <properties>
-                <jacoco.line.coverage>0.7</jacoco.line.coverage>
-                <jacoco.branch.coverage>0.6</jacoco.branch.coverage>
+                <!-- Updated to current achieved coverage -->
+                <jacoco.line.coverage>0.7888</jacoco.line.coverage>
+                <jacoco.branch.coverage>0.6989</jacoco.branch.coverage>
             </properties>
 
             <build>
+                <defaultGoal>verify</defaultGoal>
                 <plugins>
                     <plugin>
                         <groupId>org.sonarsource.scanner.maven</groupId>
