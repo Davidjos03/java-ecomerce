@@ -525,7 +525,6 @@ public class StoreTailerTest extends QueueTestCommon {
         }
     }
 
-
     @Test
     public void testMoveToIndex() {
         File dir = getTmpDir();
@@ -608,7 +607,6 @@ public class StoreTailerTest extends QueueTestCommon {
             assertEquals("Message 3", tailer.readText());
         }
     }
-
 
     @Test
     public void testBehaviorOnEmptyQueue() {

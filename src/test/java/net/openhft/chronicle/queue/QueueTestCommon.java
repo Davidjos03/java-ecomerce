@@ -48,10 +48,7 @@ public class QueueTestCommon {
         System.setProperty("queue.check.index", "true");
     }
 
-    // *************************************************************************
     // JUNIT Rules
-    // *************************************************************************
-
     // catch-all timeout for when it has not been specified
     @Rule
     public Timeout globalTimeout = Timeout.seconds(60);
@@ -76,9 +73,6 @@ public class QueueTestCommon {
         }
     };
 
-    // *************************************************************************
-    //
-    // *************************************************************************
     private static AtomicLong counter = new AtomicLong();
     private Set<String> targetAllowList;
     private long freeSpace;

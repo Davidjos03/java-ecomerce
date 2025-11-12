@@ -23,7 +23,6 @@ public class ToEndInvalidIndexTest extends QueueTestCommon {
     private Path queuePath;
     private SetTimeProvider setTimeProvider;
 
-
     @Before
     public void setUp() throws StreamCorruptedException {
         queuePath = IOTools.createTempDirectory("partialIndex");

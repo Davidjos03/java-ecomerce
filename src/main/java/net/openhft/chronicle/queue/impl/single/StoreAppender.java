@@ -492,7 +492,6 @@ class StoreAppender extends AbstractCloseable
         return writingDocument(false); // avoid overhead of a default method.
     }
 
-
     /**
      * Prepares and returns the write context for writing a document.
      *

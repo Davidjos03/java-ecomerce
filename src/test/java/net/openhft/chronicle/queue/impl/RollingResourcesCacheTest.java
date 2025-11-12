@@ -95,7 +95,6 @@ public class RollingResourcesCacheTest extends QueueTestCommon {
         assertEquals(cycle, cache.parseCount(expectedFileName));
     }
 
-
     @Test
     public void resourceLookupIsCached() {
         final File dir = getTmpDir();
@@ -349,7 +348,6 @@ public class RollingResourcesCacheTest extends QueueTestCommon {
         RollingResourcesCache.Resource resource = cache.resourceFor(cycle);
         assertEquals(expectedLong, cache.toLong(resource.path));
     }
-
 
     private RollingResourcesCache newCache(File dir) {
         return new RollingResourcesCache(

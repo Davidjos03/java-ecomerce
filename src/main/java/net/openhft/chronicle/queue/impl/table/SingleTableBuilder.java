@@ -77,10 +77,6 @@ public class SingleTableBuilder<T extends Metadata> implements Builder<TableStor
         return builder(basePathFile, WireType.BINARY_LIGHT, metadata);
     }
 
-    // *************************************************************************
-    //
-    // *************************************************************************
-
     @NotNull
     public TableStore<T> build() {
         if (readOnly) {

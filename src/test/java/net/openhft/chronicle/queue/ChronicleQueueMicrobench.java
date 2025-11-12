@@ -36,10 +36,6 @@ public class ChronicleQueueMicrobench {
             "-XX:+HeapDumpOnOutOfMemoryError"
     };
 
-    // *************************************************************************
-    //
-    // *************************************************************************
-
     public static void handleUnexpectedException(Throwable t) {
         assertNull(t);
     }
@@ -93,10 +89,6 @@ public class ChronicleQueueMicrobench {
     private int getMeasureIterations() {
         return Integer.getInteger("measureIterations", -1);
     }
-
-    // *************************************************************************
-    //
-    // *************************************************************************
 
     private String getReportDir() {
         return System.getProperty("perfReportDir");

@@ -409,10 +409,7 @@ public class SingleChronicleQueueStore extends AbstractCloseable implements Wire
                 '}';
     }
 
-    // *************************************************************************
     // Marshalling
-    // *************************************************************************
-
     /**
      * Writes the current state of the store to the given {@link WireOut}.
      * This includes the write position, indexing, and data format version.

@@ -343,7 +343,6 @@ public class ChronicleReaderTest extends QueueTestCommon {
         capturedOutput.poll();
     }
 
-
     @Test
     public void shouldNotIncludeMessageHistoryByDefaultMethodReader() {
         basicReader().

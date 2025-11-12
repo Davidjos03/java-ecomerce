@@ -41,7 +41,6 @@ public class ChangeRollCycleTest {
         // Define the queue path
         String queuePath = OS.getTarget() + "/changeRollCycle-" + System.nanoTime();
 
-
         // Step 1: Open a queue with a FAST_DAILY roll cycle and a tailer
         try (ChronicleQueue q1 = ChronicleQueue.singleBuilder(queuePath)
                 .rollCycle(RollCycles.FAST_DAILY)

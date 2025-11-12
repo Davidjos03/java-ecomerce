@@ -136,7 +136,6 @@ public class SingleChronicleQueue extends AbstractCloseable implements RollingCh
     private final long[] chunkCount = {0};
     private final SyncMode syncMode;
 
-
     /**
      * Constructs a SingleChronicleQueue with the specified builder configuration.
      * This constructor sets up various configurations like rolling cycle, epoch,

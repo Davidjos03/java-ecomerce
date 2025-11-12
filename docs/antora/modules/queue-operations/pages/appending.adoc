@@ -114,7 +114,7 @@ An instance of `Person` can be then be written with `appender.writeDocument()` a
 SingleChronicleQueue queue = SingleChronicleQueueBuilder.builder().path(Files
     .createTempDirectory("queue").toFile()).build();
 ExcerptAppender appender = queue.acquireAppender();
-        
+
 Person person = new Person();
 person.name = "Rob";
 person.age = 40;
